@@ -60,13 +60,7 @@ const DISPOSITION_TOKENS: Record<string, string> = {
   neutral: "--neutral",
 };
 
-const CURSOR_PALETTE = [
-  "--accent",
-  "--success",
-  "--attention",
-  "--secret",
-  "--danger",
-];
+const CURSOR_PALETTE = ["--accent", "--success", "--attention", "--secret", "--danger"];
 
 /**
  * labelColors outlines a token's name in the colour of the surface behind the interface,
@@ -84,9 +78,7 @@ const MAX_ZOOM = 4;
 const CURSOR_TIMEOUT = 6000;
 
 function cssColor(name: string, fallback: string): number {
-  const value = getComputedStyle(document.documentElement)
-    .getPropertyValue(name)
-    .trim();
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   const parsed = Number.parseInt(value.replace("#", ""), 16);
   return Number.isNaN(parsed) ? Number.parseInt(fallback, 16) : parsed;
 }
@@ -206,9 +198,7 @@ export class Tabletop {
     this.wallLayer.clear();
 
     for (const wall of this.walls) {
-      const color = wall.door
-        ? cssColor("--attention", "b26a00")
-        : cssColor("--text-2", "5c6180");
+      const color = wall.door ? cssColor("--attention", "b26a00") : cssColor("--text-2", "5c6180");
 
       this.wallLayer
         .moveTo(wall.x1 * size, wall.y1 * size)
@@ -239,14 +229,9 @@ export class Tabletop {
       const color = cssColor("--attention", "b26a00");
       const radius = Math.max(9, size * 0.16);
 
-      handle
-        .circle(0, 0, radius)
-        .fill({ color, alpha: wall.doorOpen ? 0.3 : 0.85 });
+      handle.circle(0, 0, radius).fill({ color, alpha: wall.doorOpen ? 0.3 : 0.85 });
       handle.circle(0, 0, radius).stroke({ color, width: 2 });
-      handle.position.set(
-        ((wall.x1 + wall.x2) / 2) * size,
-        ((wall.y1 + wall.y2) / 2) * size,
-      );
+      handle.position.set(((wall.x1 + wall.x2) / 2) * size, ((wall.y1 + wall.y2) / 2) * size);
       handle.eventMode = "static";
       handle.cursor = "pointer";
       handle.on("pointerdown", (event: FederatedPointerEvent) => {
@@ -339,10 +324,7 @@ export class Tabletop {
     const node = this.nodes.get(id);
     if (!node || node.dragging) return;
     node.container.alpha = 0.6;
-    node.container.position.set(
-      x * this.scene.gridSize,
-      y * this.scene.gridSize,
-    );
+    node.container.position.set(x * this.scene.gridSize, y * this.scene.gridSize);
   }
 
   showCursor(cursor: CursorShape): void {
@@ -380,17 +362,10 @@ export class Tabletop {
   private createCursor(cursor: CursorShape): CursorNode {
     const container = new Container();
     const arrow = new Graphics();
-    const paletteEntry =
-      CURSOR_PALETTE[hashOf(cursor.userId) % CURSOR_PALETTE.length];
+    const paletteEntry = CURSOR_PALETTE[hashOf(cursor.userId) % CURSOR_PALETTE.length];
     const color = cssColor(paletteEntry ?? "--accent", "5b4be8");
 
-    arrow
-      .moveTo(0, 0)
-      .lineTo(0, 16)
-      .lineTo(4.5, 12)
-      .lineTo(11, 11)
-      .closePath()
-      .fill({ color });
+    arrow.moveTo(0, 0).lineTo(0, 16).lineTo(4.5, 12).lineTo(11, 11).closePath().fill({ color });
 
     const label = new Text({
       text: cursor.name,
@@ -420,12 +395,7 @@ export class Tabletop {
         if (!this.wallStart) {
           this.wallStart = point;
         } else {
-          this.handlers.onWall?.(
-            this.wallStart.x,
-            this.wallStart.y,
-            point.x,
-            point.y,
-          );
+          this.handlers.onWall?.(this.wallStart.x, this.wallStart.y, point.x, point.y);
           this.wallStart = null;
           this.draftWall.clear();
         }
@@ -461,10 +431,7 @@ export class Tabletop {
       }
 
       if (this.panning) {
-        this.world.position.set(
-          event.global.x - this.panFrom.x,
-          event.global.y - this.panFrom.y,
-        );
+        this.world.position.set(event.global.x - this.panFrom.x, event.global.y - this.panFrom.y);
         return;
       }
 
@@ -496,10 +463,7 @@ export class Tabletop {
         const before = this.world.toLocal(pointer);
 
         const factor = event.deltaY < 0 ? 1.12 : 1 / 1.12;
-        const next = Math.min(
-          MAX_ZOOM,
-          Math.max(MIN_ZOOM, this.world.scale.x * factor),
-        );
+        const next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, this.world.scale.x * factor));
         this.world.scale.set(next);
 
         const after = this.world.toLocal(pointer);
@@ -523,8 +487,7 @@ export class Tabletop {
   private select(id: string | null): void {
     this.selected = id;
     for (const [nodeId, node] of this.nodes) {
-      node.ring.tint =
-        nodeId === id ? cssColor("--accent", "5b4be8") : 0xffffff;
+      node.ring.tint = nodeId === id ? cssColor("--accent", "5b4be8") : 0xffffff;
       node.ring.scale.set(nodeId === id ? 1.08 : 1);
     }
     this.handlers.onSelected?.(id);
@@ -543,10 +506,7 @@ export class Tabletop {
     node.container.alpha = 1;
 
     if (!node.dragging) {
-      node.container.position.set(
-        token.x * this.scene.gridSize,
-        token.y * this.scene.gridSize,
-      );
+      node.container.position.set(token.x * this.scene.gridSize, token.y * this.scene.gridSize);
     }
     node.label.text = token.name;
     this.paintRing(node);
@@ -556,10 +516,7 @@ export class Tabletop {
   private paintRing(node: TokenNode): void {
     const size = this.scene.gridSize;
     const radius = size * 0.42;
-    const color = cssColor(
-      DISPOSITION_TOKENS[node.shape.disposition] ?? "--neutral",
-      "5c6180",
-    );
+    const color = cssColor(DISPOSITION_TOKENS[node.shape.disposition] ?? "--neutral", "5c6180");
 
     node.ring.clear();
     if (!node.art.visible) {
@@ -606,9 +563,7 @@ export class Tabletop {
     node.art.visible = true;
 
     node.mask.clear();
-    node.mask
-      .circle(size / 2, size / 2, diameter / 2)
-      .fill({ color: 0xffffff });
+    node.mask.circle(size / 2, size / 2, diameter / 2).fill({ color: 0xffffff });
 
     this.paintRing(node);
   }
@@ -665,10 +620,7 @@ export class Tabletop {
       const point = this.world.toLocal(event.global);
       node.container.position.set(point.x - offsetX, point.y - offsetY);
 
-      const cell = this.cellOf(
-        node.container.position.x,
-        node.container.position.y,
-      );
+      const cell = this.cellOf(node.container.position.x, node.container.position.y);
       this.handlers.onDragging?.(node.shape.id, cell.x, cell.y);
     };
 
@@ -680,14 +632,8 @@ export class Tabletop {
       this.app.stage.off("pointerup", end);
       this.app.stage.off("pointerupoutside", end);
 
-      const cell = this.cellOf(
-        node.container.position.x,
-        node.container.position.y,
-      );
-      node.container.position.set(
-        cell.x * this.scene.gridSize,
-        cell.y * this.scene.gridSize,
-      );
+      const cell = this.cellOf(node.container.position.x, node.container.position.y);
+      node.container.position.set(cell.x * this.scene.gridSize, cell.y * this.scene.gridSize);
       this.handlers.onMoved?.(node.shape.id, cell.x, cell.y);
     };
 

@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from "vue";
 
-const props = withDefaults(
-  defineProps<{ title: string; memoryKey: string; width?: number }>(),
-  { width: 340 },
-);
+const props = withDefaults(defineProps<{ title: string; memoryKey: string; width?: number }>(), {
+  width: 340,
+});
 const emit = defineEmits<{ (event: "close"): void }>();
 
 const position = ref({ x: 120, y: 90 });
@@ -79,7 +78,13 @@ onBeforeUnmount(() => {
   >
     <header @pointerdown.prevent="startDrag">
       <strong>{{ title }}</strong>
-      <button class="close" type="button" aria-label="Close" @pointerdown.stop @click="emit('close')">
+      <button
+        class="close"
+        type="button"
+        aria-label="Close"
+        @pointerdown.stop
+        @click="emit('close')"
+      >
         ×
       </button>
     </header>

@@ -40,7 +40,9 @@ const GROUPS: { label: string; keys: string[] }[] = [
 
 const attributes = computed(() => props.actor.data.attributes ?? {});
 const hunger = computed(() => props.actor.data.hunger ?? 0);
-const health = computed<Tracker>(() => props.actor.data.health ?? { superficial: 0, aggravated: 0, max: 0 });
+const health = computed<Tracker>(
+  () => props.actor.data.health ?? { superficial: 0, aggravated: 0, max: 0 },
+);
 const willpower = computed<Tracker>(
   () => props.actor.data.willpower ?? { superficial: 0, aggravated: 0, max: 0 },
 );
@@ -98,11 +100,14 @@ function rollPool(key: string) {
 </script>
 
 <template>
-  <FloatWindow :title="actor.name" :memory-key="`sheet-${actor.subtype}`" :width="360" @close="emit('close')">
+  <FloatWindow
+    :title="actor.name"
+    :memory-key="`sheet-${actor.subtype}`"
+    :width="360"
+    @close="emit('close')"
+  >
     <div class="sheet">
-      <p v-if="!actor.canEdit" class="readonly">
-        You can read this sheet but not change it.
-      </p>
+      <p v-if="!actor.canEdit" class="readonly">You can read this sheet but not change it.</p>
 
       <section class="hunger">
         <span class="eyebrow">Hunger</span>
@@ -141,7 +146,13 @@ function rollPool(key: string) {
         </div>
       </section>
 
-      <section v-for="entry in [{ path: 'health' as const, tracker: health }, { path: 'willpower' as const, tracker: willpower }]" :key="entry.path">
+      <section
+        v-for="entry in [
+          { path: 'health' as const, tracker: health },
+          { path: 'willpower' as const, tracker: willpower },
+        ]"
+        :key="entry.path"
+      >
         <span class="eyebrow">{{ entry.path }}</span>
         <div class="boxes">
           <button
@@ -154,7 +165,13 @@ function rollPool(key: string) {
             :aria-label="`${entry.path} ${index}`"
             @click="cycleBox(entry.path, entry.tracker, index - 1)"
           >
-            {{ boxState(entry.tracker, index - 1) === "aggravated" ? "x" : boxState(entry.tracker, index - 1) === "superficial" ? "/" : "" }}
+            {{
+              boxState(entry.tracker, index - 1) === "aggravated"
+                ? "x"
+                : boxState(entry.tracker, index - 1) === "superficial"
+                  ? "/"
+                  : ""
+            }}
           </button>
         </div>
       </section>

@@ -102,7 +102,10 @@ export class Session {
   private closing = false;
   private reconnectTimer: number | null = null;
   private pingTimer: number | null = null;
-  private pending = new Map<number, { resolve: (value: unknown) => void; reject: (reason: ErrorFrame) => void }>();
+  private pending = new Map<
+    number,
+    { resolve: (value: unknown) => void; reject: (reason: ErrorFrame) => void }
+  >();
 
   private readonly codec: Codec;
 
@@ -260,7 +263,9 @@ export class Session {
 
       case "error":
         if (frame.error) {
-          const waiting = frame.error.requestId ? this.pending.get(frame.error.requestId) : undefined;
+          const waiting = frame.error.requestId
+            ? this.pending.get(frame.error.requestId)
+            : undefined;
           if (waiting && frame.error.requestId) {
             waiting.reject(frame.error);
             this.pending.delete(frame.error.requestId);

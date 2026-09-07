@@ -54,7 +54,9 @@ textarea {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  transition: border-color var(--t-state), background var(--t-state);
+  transition:
+    border-color var(--t-state),
+    background var(--t-state);
 }
 
 .btn:hover:not(:disabled) {

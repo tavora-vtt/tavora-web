@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from "vue";
 import {
   api,
+  ApiError,
   type ActorRecord,
   type AssetRecord,
   type Identity,
@@ -10,7 +11,6 @@ import {
   type TokenRecord,
   type World,
 } from "../api/client";
-import { ApiError } from "../api/client";
 import { Session, type ConnectionState, type EventFrame } from "../net/socket";
 import type { SceneShape, TokenShape, WallShape } from "../canvas/tabletop";
 import BrandMark from "../components/BrandMark.vue";
@@ -116,13 +116,9 @@ async function uploadArt(event: Event) {
   uploadError.value = "";
   try {
     const record = await api.uploadAsset(props.world.id, file);
-    assets.value = [
-      record,
-      ...assets.value.filter((entry) => entry.id !== record.id),
-    ];
+    assets.value = [record, ...assets.value.filter((entry) => entry.id !== record.id)];
   } catch (error) {
-    uploadError.value =
-      error instanceof ApiError ? uploadMessage(error) : "Upload failed.";
+    uploadError.value = error instanceof ApiError ? uploadMessage(error) : "Upload failed.";
   } finally {
     uploading.value = false;
   }
@@ -186,18 +182,14 @@ function clearArt() {
 
 const artTarget = computed(() => {
   if (selected.value) {
-    return (
-      tokens.value.find((token) => token.id === selected.value)?.name ??
-      "the selected token"
-    );
+    return tokens.value.find((token) => token.id === selected.value)?.name ?? "the selected token";
   }
   return scene.value ? scene.value.name : "no scene";
 });
 
 async function loadScenes() {
   scenes.value = await api.scenes(props.world.id);
-  const active =
-    scenes.value.find((entry) => entry.active) ?? scenes.value[0] ?? null;
+  const active = scenes.value.find((entry) => entry.active) ?? scenes.value[0] ?? null;
   await openScene(active);
 }
 
@@ -250,10 +242,7 @@ async function addWall(x1: number, y1: number, x2: number, y2: number) {
 }
 
 async function createScene() {
-  const created = await api.createScene(
-    props.world.id,
-    `Scene ${scenes.value.length + 1}`,
-  );
+  const created = await api.createScene(props.world.id, `Scene ${scenes.value.length + 1}`);
   scenes.value = [...scenes.value, created];
   await activateScene(created);
 }
@@ -367,9 +356,7 @@ function endCombat() {
 }
 
 const activeCombatant = computed(() =>
-  combat.value?.active
-    ? (combat.value.combatants[combat.value.turn]?.id ?? null)
-    : null,
+  combat.value?.active ? (combat.value.combatants[combat.value.turn]?.id ?? null) : null,
 );
 
 function post(text: string, audience: string) {
@@ -385,23 +372,17 @@ function record(event: EventFrame) {
 
   if (event.kind === "chat.message") {
     const message = event.payload as ChatMessage | undefined;
-    if (
-      message?.id &&
-      !messages.value.some((entry) => entry.id === message.id)
-    ) {
+    if (message?.id && !messages.value.some((entry) => entry.id === message.id)) {
       messages.value = [...messages.value, message].slice(-200);
     }
     return;
   }
 
   if (event.kind === "scene.door.toggle") {
-    const door = event.payload as
-      { wallId?: string; doorOpen?: boolean } | undefined;
+    const door = event.payload as { wallId?: string; doorOpen?: boolean } | undefined;
     if (door?.wallId !== undefined) {
       walls.value = walls.value.map((wall) =>
-        wall.id === door.wallId
-          ? { ...wall, doorOpen: door.doorOpen ?? false }
-          : wall,
+        wall.id === door.wallId ? { ...wall, doorOpen: door.doorOpen ?? false } : wall,
       );
     }
     return;
@@ -409,12 +390,9 @@ function record(event: EventFrame) {
 
   if (event.kind === "scene.visibility") {
     const update = event.payload as
-      | { tokens?: { id: string; name: string; data: TokenRecord["data"] }[] }
-      | undefined;
+      { tokens?: { id: string; name: string; data: TokenRecord["data"] }[] } | undefined;
     if (update?.tokens) {
-      tokens.value = update.tokens.map((record) =>
-        toShape(record as TokenRecord),
-      );
+      tokens.value = update.tokens.map((record) => toShape(record as TokenRecord));
     }
     return;
   }
@@ -435,15 +413,13 @@ function record(event: EventFrame) {
   }
 
   if (event.kind === "scene.activate") {
-    const activated = event.payload as
-      { sceneId?: string; name?: string } | undefined;
+    const activated = event.payload as { sceneId?: string; name?: string } | undefined;
     if (activated?.sceneId) {
       scenes.value = scenes.value.map((entry) => ({
         ...entry,
         active: entry.id === activated.sceneId,
       }));
-      const target =
-        scenes.value.find((entry) => entry.id === activated.sceneId) ?? null;
+      const target = scenes.value.find((entry) => entry.id === activated.sceneId) ?? null;
       void openScene(target);
       log.value = [
         {
@@ -493,8 +469,7 @@ function record(event: EventFrame) {
   }
 
   const payload = event.payload as
-    | { id?: string; name?: string; img?: string; data?: TokenRecord["data"] }
-    | undefined;
+    { id?: string; name?: string; img?: string; data?: TokenRecord["data"] } | undefined;
   if (payload?.id && payload.data) {
     const shapeFromEvent: TokenShape = {
       id: payload.id,
@@ -600,30 +575,16 @@ onBeforeUnmount(() => session.value?.close());
       </span>
       <ThemeToggle />
       <span class="muted">{{ identity.username }} · {{ role }}</span>
-      <button class="btn btn-quiet" type="button" @click="emit('leave')">
-        Leave
-      </button>
+      <button class="btn btn-quiet" type="button" @click="emit('leave')">Leave</button>
     </header>
 
     <nav class="rail" aria-label="Tools">
-      <button
-        v-for="tool in ['select', 'measure', 'ping']"
-        :key="tool"
-        :title="tool"
-        type="button"
-      >
+      <button v-for="tool in ['select', 'measure', 'ping']" :key="tool" :title="tool" type="button">
         <span aria-hidden="true">{{ tool[0]?.toUpperCase() }}</span>
         <span class="sr">{{ tool }}</span>
       </button>
       <div class="railgap"></div>
-      <button
-        v-if="isGM && scene"
-        title="Add token"
-        type="button"
-        @click="addToken"
-      >
-        +
-      </button>
+      <button v-if="isGM && scene" title="Add token" type="button" @click="addToken">+</button>
       <button
         v-if="isGM && scene"
         title="Draw walls"
@@ -667,12 +628,7 @@ onBeforeUnmount(() => session.value?.close());
       <div v-else class="empty">
         <p class="eyebrow">no scene</p>
         <p class="muted">This world has no scene yet.</p>
-        <button
-          v-if="isGM"
-          class="btn btn-primary"
-          type="button"
-          @click="createScene"
-        >
+        <button v-if="isGM" class="btn btn-primary" type="button" @click="createScene">
           Create a scene
         </button>
         <p v-else class="muted">Ask the game master to create one.</p>
@@ -683,12 +639,7 @@ onBeforeUnmount(() => session.value?.close());
       <div class="panel">
         <h3 class="eyebrow">
           Scenes
-          <button
-            v-if="isGM"
-            class="btn btn-quiet add"
-            type="button"
-            @click="createScene"
-          >
+          <button v-if="isGM" class="btn btn-quiet add" type="button" @click="createScene">
             +
           </button>
         </h3>
@@ -711,9 +662,7 @@ onBeforeUnmount(() => session.value?.close());
       <div v-if="combat?.active || isGM" class="panel">
         <h3 class="eyebrow">
           Combat
-          <span v-if="combat?.active" class="round mono"
-            >round {{ combat.round }}</span
-          >
+          <span v-if="combat?.active" class="round mono">round {{ combat.round }}</span>
         </h3>
 
         <ul v-if="combat?.active" class="order">
@@ -740,12 +689,8 @@ onBeforeUnmount(() => session.value?.close());
             Roll initiative
           </button>
           <template v-else>
-            <button class="btn btn-primary" type="button" @click="nextTurn">
-              Next turn
-            </button>
-            <button class="btn btn-quiet" type="button" @click="endCombat">
-              End
-            </button>
+            <button class="btn btn-primary" type="button" @click="nextTurn">Next turn</button>
+            <button class="btn btn-quiet" type="button" @click="endCombat">End</button>
           </template>
         </div>
       </div>
@@ -755,11 +700,7 @@ onBeforeUnmount(() => session.value?.close());
           Art
           <label class="btn btn-quiet add" :class="{ busy: uploading }">
             {{ uploading ? "…" : "+" }}
-            <input
-              type="file"
-              accept="image/png,image/jpeg,image/gif"
-              @change="uploadArt"
-            />
+            <input type="file" accept="image/png,image/jpeg,image/gif" @change="uploadArt" />
           </label>
         </h3>
 
@@ -790,12 +731,7 @@ onBeforeUnmount(() => session.value?.close());
       <div class="panel">
         <h3 class="eyebrow">
           Characters
-          <button
-            v-if="isGM"
-            class="btn btn-quiet add"
-            type="button"
-            @click="createActor"
-          >
+          <button v-if="isGM" class="btn btn-quiet add" type="button" @click="createActor">
             +
           </button>
         </h3>
@@ -819,12 +755,7 @@ onBeforeUnmount(() => session.value?.close());
             <em class="muted">{{ member.role }}</em>
           </li>
         </ul>
-        <button
-          v-if="isGM"
-          class="btn btn-quiet invite"
-          type="button"
-          @click="createInvite"
-        >
+        <button v-if="isGM" class="btn btn-quiet invite" type="button" @click="createInvite">
           Create invite link
         </button>
         <p v-if="inviteLink" class="mono link">{{ inviteLink }}</p>
@@ -835,12 +766,7 @@ onBeforeUnmount(() => session.value?.close());
           Chat · seq {{ sequence }}
           <em v-if="selected" class="mono selected">{{ selected }}</em>
         </h3>
-        <ChatPanel
-          :messages="messages"
-          :can-whisper="isGM"
-          @post="post"
-          @roll="roll"
-        />
+        <ChatPanel :messages="messages" :can-whisper="isGM" @post="post" @roll="roll" />
       </div>
     </aside>
 

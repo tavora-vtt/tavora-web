@@ -32,7 +32,7 @@ onMounted(() => {
 <template>
   <div class="seg" role="group" aria-label="Theme">
     <button
-      v-for="option in (['light', 'dark', 'system'] as const)"
+      v-for="option in ['light', 'dark', 'system'] as const"
       :key="option"
       type="button"
       :aria-pressed="theme === option"

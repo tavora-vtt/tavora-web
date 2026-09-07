@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
-import { Tabletop, type CursorShape, type SceneShape, type TokenShape, type WallShape } from "../canvas/tabletop";
+import {
+  Tabletop,
+  type CursorShape,
+  type SceneShape,
+  type TokenShape,
+  type WallShape,
+} from "../canvas/tabletop";
 
 const props = defineProps<{
   scene: SceneShape | null;
@@ -71,7 +77,10 @@ onMounted(async () => {
   observer.observe(host.value);
 
   themeWatcher = new MutationObserver(() => instance.repaint());
-  themeWatcher.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  themeWatcher.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ["data-theme"],
+  });
 });
 
 watch(

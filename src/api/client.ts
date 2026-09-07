@@ -146,13 +146,10 @@ export const api = {
   logout: () => request<void>("/api/auth/logout", { method: "POST" }),
 
   worlds: () => request<World[]>("/api/worlds"),
-  createWorld: (title: string, systemId: string) =>
-    post<World>("/api/worlds", { title, systemId }),
+  createWorld: (title: string, systemId: string) => post<World>("/api/worlds", { title, systemId }),
 
-  members: (worldId: string) =>
-    request<Member[]>(`/api/worlds/${worldId}/members`),
-  invites: (worldId: string) =>
-    request<Invite[]>(`/api/worlds/${worldId}/invites`),
+  members: (worldId: string) => request<Member[]>(`/api/worlds/${worldId}/members`),
+  invites: (worldId: string) => request<Invite[]>(`/api/worlds/${worldId}/invites`),
   createInvite: (worldId: string, role: string, maxUses: number) =>
     post<Invite>(`/api/worlds/${worldId}/invites`, { role, maxUses }),
   revokeInvite: (worldId: string, inviteId: string) =>
@@ -161,14 +158,11 @@ export const api = {
     }),
 
   previewInvite: (token: string) =>
-    request<{ worldTitle: string; role: string; valid: boolean }>(
-      `/api/invites/${token}`,
-    ),
+    request<{ worldTitle: string; role: string; valid: boolean }>(`/api/invites/${token}`),
   acceptInvite: (token: string, username: string, password: string) =>
     post<Identity>(`/api/invites/${token}/accept`, { username, password }),
 
-  scenes: (worldId: string) =>
-    request<Scene[]>(`/api/worlds/${worldId}/scenes`),
+  scenes: (worldId: string) => request<Scene[]>(`/api/worlds/${worldId}/scenes`),
   createScene: (worldId: string, name: string) =>
     post<Scene>(`/api/worlds/${worldId}/scenes`, { name }),
   tokens: (worldId: string, sceneId: string) =>
@@ -209,23 +203,16 @@ export const api = {
       door,
     }),
 
-  actors: (worldId: string) =>
-    request<ActorRecord[]>(`/api/worlds/${worldId}/actors`),
+  actors: (worldId: string) => request<ActorRecord[]>(`/api/worlds/${worldId}/actors`),
   createActor: (worldId: string, name: string, subtype: string) =>
     post<ActorRecord>(`/api/worlds/${worldId}/actors`, { name, subtype }),
-  setDocumentAccess: (
-    worldId: string,
-    documentId: string,
-    userId: string,
-    level: string,
-  ) =>
+  setDocumentAccess: (worldId: string, documentId: string, userId: string, level: string) =>
     request<void>(`/api/worlds/${worldId}/documents/${documentId}/access`, {
       method: "PUT",
       body: JSON.stringify({ userId, level }),
     }),
 
-  assets: (worldId: string) =>
-    request<AssetRecord[]>(`/api/worlds/${worldId}/assets`),
+  assets: (worldId: string) => request<AssetRecord[]>(`/api/worlds/${worldId}/assets`),
   uploadAsset: (worldId: string, file: File) => {
     const form = new FormData();
     form.append("file", file);

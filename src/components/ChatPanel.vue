@@ -98,7 +98,11 @@ watch(
     <div ref="feed" class="feed">
       <p v-if="messages.length === 0" class="muted">Nothing said yet.</p>
 
-      <article v-for="message in messages" :key="message.id" :data-whisper="message.audience === 'gm'">
+      <article
+        v-for="message in messages"
+        :key="message.id"
+        :data-whisper="message.audience === 'gm'"
+      >
         <header>
           <strong>{{ message.author }}</strong>
           <span v-if="message.audience === 'gm'" class="whisper-tag">to the table staff</span>

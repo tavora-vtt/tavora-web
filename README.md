@@ -73,6 +73,10 @@ The W tool on the rail draws walls: click to start, move to preview, click to fi
 to the grid. Walls render on the map, doors in amber. A token a player cannot see never
 arrives, so it is simply absent from their map rather than drawn and hidden.
 
+The D tool draws doors instead of plain walls. A door carries a handle on the map that the
+game master clicks to open or close it, and everyone's view updates in the same breath:
+tokens behind it appear or vanish without a reload.
+
 The client speaks the binary Protobuf protocol, generated from `tavora-protocol` and
 consumed as a git dependency pinned to a tag. Append `?protocol=json` to the page URL to
 switch the socket to the readable encoding for debugging; the server only honours it when

@@ -38,6 +38,7 @@ export interface TabletopHandlers {
   onPointer?: (x: number, y: number) => void;
   onView?: (zoom: number) => void;
   onWall?: (x1: number, y1: number, x2: number, y2: number) => void;
+  onDoor?: (id: string) => void;
 }
 
 const DISPOSITION_TOKENS: Record<string, string> = {
@@ -88,6 +89,7 @@ export class Tabletop {
   private grid = new Graphics();
   private wallLayer = new Graphics();
   private draftWall = new Graphics();
+  private doorLayer = new Container();
   private tokenLayer = new Container();
   private cursorLayer = new Container();
   private nodes = new Map<string, TokenNode>();
@@ -116,6 +118,7 @@ export class Tabletop {
     this.world.addChild(this.tokenLayer);
     this.world.addChild(this.wallLayer);
     this.world.addChild(this.draftWall);
+    this.world.addChild(this.doorLayer);
     this.world.addChild(this.cursorLayer);
     this.app.stage.addChild(this.world);
 
@@ -144,6 +147,7 @@ export class Tabletop {
   }
 
   private walls: WallShape[] = [];
+  private doorHandles: Graphics[] = [];
   private wallTool = false;
   private wallStart: { x: number; y: number } | null = null;
 
@@ -171,6 +175,41 @@ export class Tabletop {
         .moveTo(wall.x1 * size, wall.y1 * size)
         .lineTo(wall.x2 * size, wall.y2 * size)
         .stroke({ color, width: 6, alpha: wall.doorOpen ? 0.35 : 0.9, cap: "round" });
+    }
+
+    this.rebuildDoorHandles();
+  }
+
+  private rebuildDoorHandles(): void {
+    for (const handle of this.doorHandles) {
+      handle.destroy();
+    }
+    this.doorHandles = [];
+
+    const size = this.scene.gridSize;
+
+    for (const wall of this.walls) {
+      if (!wall.door) continue;
+
+      const handle = new Graphics();
+      const color = cssColor("--attention", "b26a00");
+      const radius = Math.max(9, size * 0.16);
+
+      handle.circle(0, 0, radius).fill({ color, alpha: wall.doorOpen ? 0.3 : 0.85 });
+      handle.circle(0, 0, radius).stroke({ color, width: 2 });
+      handle.position.set(
+        ((wall.x1 + wall.x2) / 2) * size,
+        ((wall.y1 + wall.y2) / 2) * size,
+      );
+      handle.eventMode = "static";
+      handle.cursor = "pointer";
+      handle.on("pointerdown", (event: FederatedPointerEvent) => {
+        event.stopPropagation();
+        this.handlers.onDoor?.(wall.id);
+      });
+
+      this.doorLayer.addChild(handle);
+      this.doorHandles.push(handle);
     }
   }
 

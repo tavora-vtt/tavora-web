@@ -14,6 +14,7 @@ const emit = defineEmits<{
   (event: "selected", id: string | null): void;
   (event: "pointer", x: number, y: number): void;
   (event: "wall", x1: number, y1: number, x2: number, y2: number): void;
+  (event: "door", id: string): void;
 }>();
 
 const host = ref<HTMLElement | null>(null);
@@ -54,6 +55,7 @@ onMounted(async () => {
       zoom.value = next;
     },
     onWall: (x1, y1, x2, y2) => emit("wall", x1, y1, x2, y2),
+    onDoor: (id) => emit("door", id),
   });
 
   await instance.mount(host.value);

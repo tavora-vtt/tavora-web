@@ -40,6 +40,7 @@ interface Combat {
 const combat = ref<Combat | null>(null);
 const walls = ref<WallShape[]>([]);
 const wallTool = ref(false);
+const doorTool = ref(false);
 const openSheets = ref<string[]>([]);
 const inviteToken = ref("");
 const selected = ref<string | null>(null);
@@ -110,9 +111,14 @@ async function openScene(target: Scene | null) {
   }));
 }
 
+function toggleDoor(id: string) {
+  if (!isGM.value) return;
+  void session.value?.intent("scene.door.toggle", { wallId: id });
+}
+
 async function addWall(x1: number, y1: number, x2: number, y2: number) {
   if (!scene.value || !isGM.value) return;
-  const record = await api.createWall(props.world.id, scene.value.id, x1, y1, x2, y2, false);
+  const record = await api.createWall(props.world.id, scene.value.id, x1, y1, x2, y2, doorTool.value);
   walls.value = [
     ...walls.value,
     { id: record.id, x1, y1, x2, y2, door: record.data.door, doorOpen: record.data.doorOpen },
@@ -244,6 +250,26 @@ function record(event: EventFrame) {
     const message = event.payload as ChatMessage | undefined;
     if (message?.id && !messages.value.some((entry) => entry.id === message.id)) {
       messages.value = [...messages.value, message].slice(-200);
+    }
+    return;
+  }
+
+  if (event.kind === "scene.door.toggle") {
+    const door = event.payload as { wallId?: string; doorOpen?: boolean } | undefined;
+    if (door?.wallId !== undefined) {
+      walls.value = walls.value.map((wall) =>
+        wall.id === door.wallId ? { ...wall, doorOpen: door.doorOpen ?? false } : wall,
+      );
+    }
+    return;
+  }
+
+  if (event.kind === "scene.visibility") {
+    const update = event.payload as
+      | { tokens?: { id: string; name: string; data: TokenRecord["data"] }[] }
+      | undefined;
+    if (update?.tokens) {
+      tokens.value = update.tokens.map((record) => toShape(record as TokenRecord));
     }
     return;
   }
@@ -417,6 +443,16 @@ onBeforeUnmount(() => session.value?.close());
       >
         W
       </button>
+      <button
+        v-if="isGM && scene"
+        title="Draw doors"
+        type="button"
+        :aria-pressed="doorTool"
+        :class="{ active: doorTool }"
+        @click="doorTool = !doorTool; wallTool = doorTool || wallTool"
+      >
+        D
+      </button>
     </nav>
 
     <section class="map">
@@ -428,6 +464,7 @@ onBeforeUnmount(() => session.value?.close());
         :walls="walls"
         :wall-tool="wallTool"
         @wall="addWall"
+        @door="toggleDoor"
         @moved="moveToken"
         @dragging="previewMove"
         @pointer="broadcastPointer"

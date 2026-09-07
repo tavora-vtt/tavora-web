@@ -1,0 +1,27 @@
+{
+  "name": "@tavora/web",
+  "version": "0.0.0",
+  "description": "Tavora VTT web client",
+  "license": "AGPL-3.0-or-later",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build",
+    "check": "vue-tsc --noEmit",
+    "preview": "vite preview"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tavora-vtt/tavora-web.git"
+  },
+  "dependencies": {
+    "vue": "^3.5.42"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.8",
+    "typescript": "^5.9.3",
+    "vite": "^8.2.2",
+    "vue-tsc": "^3.3.11"
+  }
+}

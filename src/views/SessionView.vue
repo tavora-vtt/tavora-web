@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from "vue";
-import { api, type Identity, type Member, type World } from "../api/client";
+import { api, type Identity, type Member, type Scene, type TokenRecord, type World } from "../api/client";
 import { Session, type ConnectionState, type EventFrame } from "../net/socket";
+import type { SceneShape, TokenShape } from "../canvas/tabletop";
 import BrandMark from "../components/BrandMark.vue";
 import ThemeToggle from "../components/ThemeToggle.vue";
+import TabletopCanvas from "../components/TabletopCanvas.vue";
 
 const props = defineProps<{ identity: Identity; world: World }>();
 const emit = defineEmits<{ (event: "leave"): void }>();
@@ -16,8 +18,25 @@ const role = ref(props.world.role ?? "");
 const members = ref<Member[]>([]);
 const log = ref<{ seq: number; kind: string; summary: string }[]>([]);
 const inviteToken = ref("");
+const selected = ref<string | null>(null);
+
+const scene = ref<Scene | null>(null);
+const tokens = ref<TokenShape[]>([]);
 
 const session = shallowRef<Session | null>(null);
+const canvas = ref<InstanceType<typeof TabletopCanvas> | null>(null);
+
+const isGM = computed(() => role.value === "gm");
+
+const shape = computed<SceneShape | null>(() =>
+  scene.value
+    ? {
+        width: scene.value.data.width,
+        height: scene.value.data.height,
+        gridSize: scene.value.data.gridSize,
+      }
+    : null,
+);
 
 const stateLabel = computed(() => {
   switch (state.value) {
@@ -32,42 +51,100 @@ const stateLabel = computed(() => {
   }
 });
 
-function summarise(event: EventFrame): string {
-  const payload = event.payload as Record<string, unknown> | undefined;
-  if (payload && typeof payload === "object" && "name" in payload) {
-    return String(payload.name);
+function toShape(record: TokenRecord): TokenShape {
+  return {
+    id: record.id,
+    name: record.name,
+    x: record.data?.x ?? 0,
+    y: record.data?.y ?? 0,
+    disposition: record.data?.disposition ?? "neutral",
+  };
+}
+
+async function loadScene() {
+  const list = await api.scenes(props.world.id);
+  scene.value = list[0] ?? null;
+
+  if (!scene.value) {
+    tokens.value = [];
+    return;
   }
-  return event.kind;
+  tokens.value = (await api.tokens(props.world.id, scene.value.id)).map(toShape);
+}
+
+async function createScene() {
+  scene.value = await api.createScene(props.world.id, "The Chantry");
+  tokens.value = [];
+}
+
+async function addToken() {
+  if (!scene.value) return;
+
+  const dispositions = ["friendly", "hostile", "neutral", "secret"];
+  const record = await api.createToken(
+    props.world.id,
+    scene.value.id,
+    `Token ${tokens.value.length + 1}`,
+    2 + (tokens.value.length % 8),
+    2 + Math.floor(tokens.value.length / 8),
+    dispositions[tokens.value.length % dispositions.length] ?? "neutral",
+  );
+  tokens.value = [...tokens.value, toShape(record)];
+}
+
+function moveToken(id: string, x: number, y: number) {
+  const index = tokens.value.findIndex((token) => token.id === id);
+  if (index >= 0) {
+    const next = [...tokens.value];
+    next[index] = { ...next[index]!, x, y };
+    tokens.value = next;
+  }
+  void session.value?.intent("scene.token.move", { tokenId: id, x, y });
+}
+
+function previewMove(id: string, x: number, y: number) {
+  session.value?.ephemeral("token.drag", `token:${id}`, { tokenId: id, x, y });
 }
 
 function record(event: EventFrame) {
   sequence.value = event.seq;
-  log.value = [{ seq: event.seq, kind: event.kind, summary: summarise(event) }, ...log.value].slice(0, 40);
-}
 
-async function loadMembers() {
-  try {
-    members.value = await api.members(props.world.id);
-  } catch {
-    members.value = [];
+  const payload = event.payload as { id?: string; name?: string; data?: TokenRecord["data"] } | undefined;
+  if (payload?.id && payload.data) {
+    const shapeFromEvent: TokenShape = {
+      id: payload.id,
+      name: payload.name ?? "",
+      x: payload.data.x ?? 0,
+      y: payload.data.y ?? 0,
+      disposition: payload.data.disposition ?? "neutral",
+    };
+    const index = tokens.value.findIndex((token) => token.id === payload.id);
+    if (index >= 0) {
+      const next = [...tokens.value];
+      next[index] = shapeFromEvent;
+      tokens.value = next;
+    }
+    canvas.value?.applyRemote(shapeFromEvent);
   }
+
+  log.value = [
+    { seq: event.seq, kind: event.kind, summary: payload?.name ?? event.kind },
+    ...log.value,
+  ].slice(0, 40);
 }
 
 async function createInvite() {
-  try {
-    const invite = await api.createInvite(props.world.id, "player", 0);
-    inviteToken.value = invite.token ?? "";
-  } catch {
-    inviteToken.value = "";
-  }
+  const invite = await api.createInvite(props.world.id, "player", 0);
+  inviteToken.value = invite.token ?? "";
 }
 
 const inviteLink = computed(() =>
   inviteToken.value ? `${location.origin}/invite/${inviteToken.value}` : "",
 );
 
-onMounted(() => {
-  void loadMembers();
+onMounted(async () => {
+  members.value = await api.members(props.world.id).catch(() => []);
+  await loadScene().catch(() => undefined);
 
   const connection = new Session(
     props.world.id,
@@ -82,6 +159,12 @@ onMounted(() => {
         sequence.value = welcome.seq;
       },
       onEvent: record,
+      onEphemeral: (frame) => {
+        const payload = frame.payload as { tokenId?: string; x?: number; y?: number } | undefined;
+        if (payload?.tokenId !== undefined && payload.x !== undefined && payload.y !== undefined) {
+          canvas.value?.showGhost(payload.tokenId, payload.x, payload.y);
+        }
+      },
       onLatency: (milliseconds) => {
         latency.value = milliseconds;
       },
@@ -100,7 +183,7 @@ onBeforeUnmount(() => session.value?.close());
     <header class="topbar">
       <BrandMark :size="20" />
       <strong class="world">{{ world.title }}</strong>
-      <span class="scene">no scene yet</span>
+      <span class="scene">{{ scene?.name ?? "no scene" }}</span>
 
       <div class="spacer"></div>
 
@@ -118,13 +201,27 @@ onBeforeUnmount(() => session.value?.close());
         <span aria-hidden="true">{{ tool[0]?.toUpperCase() }}</span>
         <span class="sr">{{ tool }}</span>
       </button>
+      <div class="railgap"></div>
+      <button v-if="isGM && scene" title="Add token" type="button" @click="addToken">+</button>
     </nav>
 
     <section class="map">
-      <div class="grid"></div>
-      <div class="placeholder">
-        <p class="eyebrow">canvas</p>
-        <p class="muted">The tabletop renderer lands next. The socket below is live.</p>
+      <TabletopCanvas
+        v-if="shape"
+        ref="canvas"
+        :scene="shape"
+        :tokens="tokens"
+        @moved="moveToken"
+        @dragging="previewMove"
+        @selected="(id) => (selected = id)"
+      />
+      <div v-else class="empty">
+        <p class="eyebrow">no scene</p>
+        <p class="muted">This world has no scene yet.</p>
+        <button v-if="isGM" class="btn btn-primary" type="button" @click="createScene">
+          Create a scene
+        </button>
+        <p v-else class="muted">Ask the game master to create one.</p>
       </div>
     </section>
 
@@ -138,19 +235,17 @@ onBeforeUnmount(() => session.value?.close());
             <em class="muted">{{ member.role }}</em>
           </li>
         </ul>
-        <button
-          v-if="role === 'gm'"
-          class="btn btn-quiet invite"
-          type="button"
-          @click="createInvite"
-        >
+        <button v-if="isGM" class="btn btn-quiet invite" type="button" @click="createInvite">
           Create invite link
         </button>
         <p v-if="inviteLink" class="mono link">{{ inviteLink }}</p>
       </div>
 
       <div class="panel feed">
-        <h3 class="eyebrow">World events · seq {{ sequence }}</h3>
+        <h3 class="eyebrow">
+          World events · seq {{ sequence }}
+          <em v-if="selected" class="mono selected">{{ selected }}</em>
+        </h3>
         <p v-if="log.length === 0" class="muted">Nothing has happened yet.</p>
         <ul>
           <li v-for="entry in log" :key="entry.seq">
@@ -253,6 +348,10 @@ onBeforeUnmount(() => session.value?.close());
   color: var(--text);
 }
 
+.railgap {
+  height: 10px;
+}
+
 .sr {
   position: absolute;
   width: 1px;
@@ -264,27 +363,17 @@ onBeforeUnmount(() => session.value?.close());
 .map {
   grid-area: map;
   position: relative;
-  background: var(--map-ground);
   display: grid;
   place-items: center;
+  min-width: 0;
 }
 
-.grid {
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(to right, var(--map-ink) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--map-ink) 1px, transparent 1px);
-  background-size: 48px 48px;
-  opacity: 0.6;
-}
-
-.placeholder {
-  position: relative;
+.empty {
   text-align: center;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
+  align-items: center;
 }
 
 .dock {
@@ -307,6 +396,20 @@ onBeforeUnmount(() => session.value?.close());
   flex: 1;
   min-height: 0;
   overflow: auto;
+}
+
+.panel h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.selected {
+  margin-inline-start: auto;
+  font-style: normal;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--accent);
 }
 
 .panel ul {

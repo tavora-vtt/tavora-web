@@ -38,7 +38,11 @@ tool rail, map area, and a right dock with the party and a live world event feed
 socket connects, shows its state and round-trip latency, and replays what it missed after a
 reconnect.
 
-The map is still a placeholder grid. The PixiJS renderer is the next piece.
+The map is a real PixiJS canvas: a grid, tokens with disposition rings, click to select,
+drag to move. A drag emits a preview on the ephemeral lane at pointer rate and one
+authoritative `scene.token.move` intent on release, so other clients see the token travel
+and then land where the server says it landed. The renderer prefers WebGPU and falls back
+to WebGL; the badge in the corner says which one it got.
 
 The client speaks the readable JSON protocol for now, so the dev server sets
 `TAVORA_PROTOCOL_JSON=1`. Protobuf on the client follows once `tavora-protocol` generates

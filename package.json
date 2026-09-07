@@ -16,6 +16,7 @@
     "url": "git+https://github.com/tavora-vtt/tavora-web.git"
   },
   "dependencies": {
+    "pixi.js": "^8.20.1",
     "vue": "^3.5.42"
   },
   "devDependencies": {

@@ -29,6 +29,18 @@ export interface Invite {
   token?: string;
 }
 
+export interface Scene {
+  id: string;
+  name: string;
+  data: { width: number; height: number; gridSize: number; gridType: string };
+}
+
+export interface TokenRecord {
+  id: string;
+  name: string;
+  data: { x: number; y: number; width: number; height: number; disposition: string };
+}
+
 export interface Ticket {
   ticket: string;
   expiresAt: string;
@@ -96,6 +108,14 @@ export const api = {
     request<{ worldTitle: string; role: string; valid: boolean }>(`/api/invites/${token}`),
   acceptInvite: (token: string, username: string, password: string) =>
     post<Identity>(`/api/invites/${token}/accept`, { username, password }),
+
+  scenes: (worldId: string) => request<Scene[]>(`/api/worlds/${worldId}/scenes`),
+  createScene: (worldId: string, name: string) =>
+    post<Scene>(`/api/worlds/${worldId}/scenes`, { name }),
+  tokens: (worldId: string, sceneId: string) =>
+    request<TokenRecord[]>(`/api/worlds/${worldId}/scenes/${sceneId}/tokens`),
+  createToken: (worldId: string, sceneId: string, name: string, x: number, y: number, disposition: string) =>
+    post<TokenRecord>(`/api/worlds/${worldId}/scenes/${sceneId}/tokens`, { name, x, y, disposition }),
 
   ticket: (worldId: string) => post<Ticket>("/api/session/ticket", { worldId }),
 

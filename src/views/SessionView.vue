@@ -20,6 +20,7 @@ const log = ref<{ seq: number; kind: string; summary: string }[]>([]);
 const inviteToken = ref("");
 const selected = ref<string | null>(null);
 
+const scenes = ref<Scene[]>([]);
 const scene = ref<Scene | null>(null);
 const tokens = ref<TokenShape[]>([]);
 
@@ -61,20 +62,30 @@ function toShape(record: TokenRecord): TokenShape {
   };
 }
 
-async function loadScene() {
-  const list = await api.scenes(props.world.id);
-  scene.value = list[0] ?? null;
+async function loadScenes() {
+  scenes.value = await api.scenes(props.world.id);
+  const active = scenes.value.find((entry) => entry.active) ?? scenes.value[0] ?? null;
+  await openScene(active);
+}
 
-  if (!scene.value) {
+async function openScene(target: Scene | null) {
+  scene.value = target;
+  if (!target) {
     tokens.value = [];
     return;
   }
-  tokens.value = (await api.tokens(props.world.id, scene.value.id)).map(toShape);
+  tokens.value = (await api.tokens(props.world.id, target.id)).map(toShape);
 }
 
 async function createScene() {
-  scene.value = await api.createScene(props.world.id, "The Chantry");
-  tokens.value = [];
+  const created = await api.createScene(props.world.id, `Scene ${scenes.value.length + 1}`);
+  scenes.value = [...scenes.value, created];
+  await activateScene(created);
+}
+
+async function activateScene(target: Scene) {
+  if (!isGM.value) return;
+  await session.value?.intent("scene.activate", { sceneId: target.id });
 }
 
 async function addToken() {
@@ -118,6 +129,23 @@ function broadcastPointer(x: number, y: number) {
 function record(event: EventFrame) {
   sequence.value = event.seq;
 
+  if (event.kind === "scene.activate") {
+    const activated = event.payload as { sceneId?: string; name?: string } | undefined;
+    if (activated?.sceneId) {
+      scenes.value = scenes.value.map((entry) => ({
+        ...entry,
+        active: entry.id === activated.sceneId,
+      }));
+      const target = scenes.value.find((entry) => entry.id === activated.sceneId) ?? null;
+      void openScene(target);
+      log.value = [
+        { seq: event.seq, kind: event.kind, summary: activated.name ?? "scene changed" },
+        ...log.value,
+      ].slice(0, 40);
+      return;
+    }
+  }
+
   const payload = event.payload as { id?: string; name?: string; data?: TokenRecord["data"] } | undefined;
   if (payload?.id && payload.data) {
     const shapeFromEvent: TokenShape = {
@@ -153,7 +181,7 @@ const inviteLink = computed(() =>
 
 onMounted(async () => {
   members.value = await api.members(props.world.id).catch(() => []);
-  await loadScene().catch(() => undefined);
+  await loadScenes().catch(() => undefined);
 
   const connection = new Session(
     props.world.id,
@@ -249,6 +277,27 @@ onBeforeUnmount(() => session.value?.close());
     </section>
 
     <aside class="dock">
+      <div class="panel">
+        <h3 class="eyebrow">
+          Scenes
+          <button v-if="isGM" class="btn btn-quiet add" type="button" @click="createScene">+</button>
+        </h3>
+        <p v-if="scenes.length === 0" class="muted">None yet.</p>
+        <ul class="scenes">
+          <li v-for="entry in scenes" :key="entry.id">
+            <button
+              type="button"
+              :class="{ current: entry.id === scene?.id }"
+              :disabled="!isGM && !entry.active"
+              @click="isGM ? activateScene(entry) : undefined"
+            >
+              <span class="dot" :class="{ live: entry.active }"></span>
+              {{ entry.name }}
+            </button>
+          </li>
+        </ul>
+      </div>
+
       <div class="panel">
         <h3 class="eyebrow">Party</h3>
         <ul>
@@ -480,6 +529,51 @@ onBeforeUnmount(() => session.value?.close());
 
 .invite {
   align-self: flex-start;
+}
+
+.add {
+  margin-inline-start: auto;
+  height: 20px;
+  padding: 0 7px;
+}
+
+.scenes button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  border-radius: var(--r-input);
+  background: none;
+  color: var(--text);
+  font-size: 12px;
+  text-align: start;
+  cursor: pointer;
+}
+
+.scenes button:disabled {
+  cursor: default;
+}
+
+.scenes button:hover:not(:disabled) {
+  background: var(--sunken);
+}
+
+.scenes button.current {
+  border-color: var(--accent);
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1.5px solid var(--text-3);
+}
+
+.dot.live {
+  background: var(--attention);
+  border-color: var(--attention);
 }
 
 .link {

@@ -49,6 +49,11 @@ again. Pointer positions go out on the ephemeral lane at 20 Hz, so everyone at t
 sees everyone else's cursor with a name label; a cursor that stops arriving fades out after
 six seconds rather than lingering forever.
 
+A world can hold several scenes. The dock lists them, the game master clicks one to make it
+active, and every connected client follows: the `scene.activate` intent writes the world's
+active scene, appends an event and fans it out, so nobody has to be told to switch. Players
+see which scene is live but cannot change it.
+
 The client speaks the readable JSON protocol for now, so the dev server sets
 `TAVORA_PROTOCOL_JSON=1`. Protobuf on the client follows once `tavora-protocol` generates
 its TypeScript bindings.

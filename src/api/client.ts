@@ -32,6 +32,7 @@ export interface Invite {
 export interface Scene {
   id: string;
   name: string;
+  active: boolean;
   data: { width: number; height: number; gridSize: number; gridType: string };
 }
 

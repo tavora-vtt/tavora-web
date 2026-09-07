@@ -21,6 +21,23 @@ const members = ref<Member[]>([]);
 const log = ref<{ seq: number; kind: string; summary: string }[]>([]);
 const messages = ref<ChatMessage[]>([]);
 const actors = ref<Actor[]>([]);
+
+interface Combatant {
+  id: string;
+  name: string;
+  initiative: number;
+  disposition: string;
+}
+
+interface Combat {
+  active: boolean;
+  round: number;
+  turn: number;
+  sceneId: string;
+  combatants: Combatant[];
+}
+
+const combat = ref<Combat | null>(null);
 const openSheets = ref<string[]>([]);
 const inviteToken = ref("");
 const selected = ref<string | null>(null);
@@ -175,6 +192,23 @@ const openActors = computed(() =>
     .filter((actor): actor is Actor => actor !== undefined),
 );
 
+function startCombat() {
+  if (!scene.value) return;
+  void session.value?.intent("combat.start", { sceneId: scene.value.id });
+}
+
+function nextTurn() {
+  void session.value?.intent("combat.next", {});
+}
+
+function endCombat() {
+  void session.value?.intent("combat.end", {});
+}
+
+const activeCombatant = computed(() =>
+  combat.value?.active ? (combat.value.combatants[combat.value.turn]?.id ?? null) : null,
+);
+
 function post(text: string, audience: string) {
   void session.value?.intent("chat.post", { text, audience });
 }
@@ -191,6 +225,21 @@ function record(event: EventFrame) {
     if (message?.id && !messages.value.some((entry) => entry.id === message.id)) {
       messages.value = [...messages.value, message].slice(-200);
     }
+    return;
+  }
+
+  if (event.kind === "combat.update" || event.kind === "combat.end") {
+    combat.value = event.payload as Combat;
+    log.value = [
+      {
+        seq: event.seq,
+        kind: event.kind,
+        summary: combat.value.active
+          ? `round ${combat.value.round}, ${combat.value.combatants[combat.value.turn]?.name ?? ""}`
+          : "combat ended",
+      },
+      ...log.value,
+    ].slice(0, 40);
     return;
   }
 
@@ -381,6 +430,36 @@ onBeforeUnmount(() => session.value?.close());
             </button>
           </li>
         </ul>
+      </div>
+
+      <div v-if="combat?.active || isGM" class="panel">
+        <h3 class="eyebrow">
+          Combat
+          <span v-if="combat?.active" class="round mono">round {{ combat.round }}</span>
+        </h3>
+
+        <ul v-if="combat?.active" class="order">
+          <li
+            v-for="(combatant, index) in combat.combatants"
+            :key="combatant.id"
+            :class="{ turn: index === combat.turn }"
+          >
+            <span class="pip" :data-disposition="combatant.disposition"></span>
+            {{ combatant.name }}
+            <em class="mono init">{{ combatant.initiative }}</em>
+          </li>
+        </ul>
+        <p v-else class="muted">Not fighting.</p>
+
+        <div v-if="isGM" class="row">
+          <button v-if="!combat?.active" class="btn btn-quiet" type="button" :disabled="!scene" @click="startCombat">
+            Roll initiative
+          </button>
+          <template v-else>
+            <button class="btn btn-primary" type="button" @click="nextTurn">Next turn</button>
+            <button class="btn btn-quiet" type="button" @click="endCombat">End</button>
+          </template>
+        </div>
       </div>
 
       <div class="panel">
@@ -637,6 +716,65 @@ onBeforeUnmount(() => session.value?.close());
 
 .invite {
   align-self: flex-start;
+}
+
+.round {
+  margin-inline-start: auto;
+  color: var(--text-3);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.order {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+}
+
+.order li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 6px;
+  border: 1px solid transparent;
+  border-radius: var(--r-input);
+}
+
+.order li.turn {
+  background: color-mix(in srgb, var(--attention) 16%, transparent);
+  border-color: color-mix(in srgb, var(--attention) 45%, transparent);
+}
+
+.order li.turn .init {
+  color: var(--attention);
+}
+
+.init {
+  margin-inline-start: auto;
+  font-style: normal;
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.pip[data-disposition="friendly"] {
+  border-color: var(--success);
+}
+
+.pip[data-disposition="hostile"] {
+  border-color: var(--danger);
+}
+
+.pip[data-disposition="secret"] {
+  border-color: var(--secret);
+}
+
+.row {
+  display: flex;
+  gap: 6px;
 }
 
 .add {

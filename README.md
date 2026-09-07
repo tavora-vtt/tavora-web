@@ -64,6 +64,11 @@ willpower are box tracks that cycle empty, superficial, aggravated. Clicking an 
 name rolls its pool into chat. A sheet you may read but not edit says so and its controls
 are disabled; the server enforces that regardless.
 
+The combat panel shows the turn order with initiative and disposition rings. The active
+turn is the one place amber appears, which is the design system's rule: warm means
+something needs you. The game master gets Roll initiative, Next turn and End; players see
+the order and nothing to press.
+
 The client speaks the binary Protobuf protocol, generated from `tavora-protocol` and
 consumed as a git dependency pinned to a tag. Append `?protocol=json` to the page URL to
 switch the socket to the readable encoding for debugging; the server only honours it when

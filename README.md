@@ -8,6 +8,9 @@ for rendering, [doc 14](https://github.com/tavora-vtt/tavora-docs/blob/main/conc
 for layout, [doc 15](https://github.com/tavora-vtt/tavora-docs/blob/main/concept/15-design-system.md)
 for the design system.
 
+> Links to `tavora-docs` point at a repository that is currently private, so they resolve
+> only for members of the organisation. The design rationale will open up with it.
+
 ## Run it
 
 ```

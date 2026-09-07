@@ -58,9 +58,10 @@ The dock carries a chat panel: type to talk, `/r 4d6kh3` or the quick buttons to
 cards show every die, with dropped ones struck through, and the total on the right. A game
 master can tick "staff only" to keep a roll off the players' sockets.
 
-The client speaks the readable JSON protocol for now, so the dev server sets
-`TAVORA_PROTOCOL_JSON=1`. Protobuf on the client follows once `tavora-protocol` generates
-its TypeScript bindings.
+The client speaks the binary Protobuf protocol, generated from `tavora-protocol` and
+consumed as a git dependency pinned to a tag. Append `?protocol=json` to the page URL to
+switch the socket to the readable encoding for debugging; the server only honours it when
+it was started with `TAVORA_PROTOCOL_JSON=1`, which `make dev` does.
 
 ## Status
 

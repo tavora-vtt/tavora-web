@@ -8,6 +8,12 @@ importers:
 
   .:
     dependencies:
+      '@bufbuild/protobuf':
+        specifier: ^2.14.1
+        version: 2.14.1
+      '@tavora/protocol':
+        specifier: github:tavora-vtt/tavora-protocol#v0.2.0
+        version: https://codeload.github.com/tavora-vtt/tavora-protocol/tar.gz/6f3d75eb588daa1bf0cccbdd21b868e26760d592
       pixi.js:
         specifier: ^8.20.1
         version: 8.20.1
@@ -46,6 +52,9 @@ packages:
   '@babel/types@7.29.8':
     resolution: {integrity: sha512-Vj1jF3cPfxg7OAfoI7QnVKLoILlm2JF9pnVHrX8qx7AHMiYWT+NDAA7jChlNgRS4WTLc/fD1lXLmPixluj+3Gg==}
     engines: {node: '>=6.9.0'}
+
+  '@bufbuild/protobuf@2.14.1':
+    resolution: {integrity: sha512-agRJn3+EJDUe8AvxTx/LnHA/GErvLE62pSaSk7+MwFOtOv8eWBu/qCq2qoZjBjVZ3C2aiFJCveuSs17KMkYGOw==}
 
   '@jridgewell/sourcemap-codec@1.6.0':
     resolution: {integrity: sha512-T7jf+5zgsZHwNJ4lvQ7/aezbyk0nNX+zJVWpmHA7VYsEx7a7qr5Rg5IbtJFqkgze5Y2sruq1RUY8Q837Od7iFw==}
@@ -154,6 +163,10 @@ packages:
 
   '@rolldown/pluginutils@1.0.1':
     resolution: {integrity: sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw==}
+
+  '@tavora/protocol@https://codeload.github.com/tavora-vtt/tavora-protocol/tar.gz/6f3d75eb588daa1bf0cccbdd21b868e26760d592':
+    resolution: {tarball: https://codeload.github.com/tavora-vtt/tavora-protocol/tar.gz/6f3d75eb588daa1bf0cccbdd21b868e26760d592}
+    version: 0.2.0
 
   '@types/earcut@3.0.0':
     resolution: {integrity: sha512-k/9fOUGO39yd2sCjrbAJvGDEQvRwRnQIZlBz43roGwUZo5SHAmyVvSFyaVVZkicRVCaDXPKlbxrUcBuJoSWunQ==}
@@ -459,6 +472,8 @@ snapshots:
       '@babel/helper-string-parser': 7.29.7
       '@babel/helper-validator-identifier': 7.29.7
 
+  '@bufbuild/protobuf@2.14.1': {}
+
   '@jridgewell/sourcemap-codec@1.6.0': {}
 
   '@oxc-project/types@0.148.0': {}
@@ -511,6 +526,10 @@ snapshots:
     optional: true
 
   '@rolldown/pluginutils@1.0.1': {}
+
+  '@tavora/protocol@https://codeload.github.com/tavora-vtt/tavora-protocol/tar.gz/6f3d75eb588daa1bf0cccbdd21b868e26760d592':
+    dependencies:
+      '@bufbuild/protobuf': 2.14.1
 
   '@types/earcut@3.0.0': {}
 

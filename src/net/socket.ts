@@ -1,3 +1,5 @@
+import { jsonCodec, protoCodec, type Codec } from "./codec";
+
 export type Lane = 0 | 1 | 2;
 
 export const LaneControl: Lane = 0;
@@ -102,11 +104,20 @@ export class Session {
   private pingTimer: number | null = null;
   private pending = new Map<number, { resolve: (value: unknown) => void; reject: (reason: ErrorFrame) => void }>();
 
+  private readonly codec: Codec;
+
   constructor(
     private readonly worldId: string,
     private readonly issueTicket: () => Promise<string>,
     private readonly handlers: SocketHandlers = {},
-  ) {}
+    codec?: Codec,
+  ) {
+    this.codec = codec ?? (readableProtocol() ? jsonCodec : protoCodec);
+  }
+
+  get format(): string {
+    return this.codec.name;
+  }
 
   get sequence(): number {
     return this.lastSeq;
@@ -125,7 +136,9 @@ export class Session {
     }
 
     const protocol = location.protocol === "https:" ? "wss" : "ws";
-    const socket = new WebSocket(`${protocol}://${location.host}/ws?format=json`);
+    const query = this.codec.binary ? "" : "?format=json";
+    const socket = new WebSocket(`${protocol}://${location.host}/ws${query}`);
+    socket.binaryType = "arraybuffer";
     this.socket = socket;
 
     socket.onopen = () => {
@@ -142,7 +155,7 @@ export class Session {
       });
     };
 
-    socket.onmessage = (message) => this.receive(message.data as string);
+    socket.onmessage = (message) => this.receive(message.data as string | ArrayBuffer);
 
     socket.onclose = () => {
       this.stopPing();
@@ -199,13 +212,17 @@ export class Session {
     if (this.socket?.readyState !== WebSocket.OPEN) {
       return;
     }
-    this.socket.send(JSON.stringify(frame));
+    try {
+      this.socket.send(this.codec.encode(frame));
+    } catch {
+      // an unencodable frame is a programming error, not a transport one
+    }
   }
 
-  private receive(raw: string): void {
+  private receive(raw: string | ArrayBuffer): void {
     let frame: Frame;
     try {
-      frame = JSON.parse(raw) as Frame;
+      frame = this.codec.decode(raw);
     } catch {
       return;
     }
@@ -286,4 +303,8 @@ export class Session {
     this.handlers.onState?.("reconnecting", detail);
     this.reconnectTimer = window.setTimeout(() => void this.connect(), jittered);
   }
+}
+
+export function readableProtocol(): boolean {
+  return new URLSearchParams(location.search).get("protocol") === "json";
 }

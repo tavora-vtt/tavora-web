@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from "vue";
-import { api, type Identity, type Member, type Scene, type TokenRecord, type World } from "../api/client";
+import { api, type ActorRecord, type Identity, type Member, type Scene, type TokenRecord, type World } from "../api/client";
 import { Session, type ConnectionState, type EventFrame } from "../net/socket";
 import type { SceneShape, TokenShape } from "../canvas/tabletop";
 import BrandMark from "../components/BrandMark.vue";
 import ThemeToggle from "../components/ThemeToggle.vue";
 import TabletopCanvas from "../components/TabletopCanvas.vue";
 import ChatPanel, { type ChatMessage } from "../components/ChatPanel.vue";
+import ActorSheet, { type Actor } from "../components/ActorSheet.vue";
 
 const props = defineProps<{ identity: Identity; world: World }>();
 const emit = defineEmits<{ (event: "leave"): void }>();
@@ -19,6 +20,8 @@ const role = ref(props.world.role ?? "");
 const members = ref<Member[]>([]);
 const log = ref<{ seq: number; kind: string; summary: string }[]>([]);
 const messages = ref<ChatMessage[]>([]);
+const actors = ref<Actor[]>([]);
+const openSheets = ref<string[]>([]);
 const inviteToken = ref("");
 const selected = ref<string | null>(null);
 
@@ -128,6 +131,50 @@ function broadcastPointer(x: number, y: number) {
   });
 }
 
+function toActor(record: ActorRecord): Actor {
+  return {
+    id: record.id,
+    name: record.name,
+    subtype: record.subtype,
+    data: record.data as Actor["data"],
+    canEdit: record.canEdit,
+  };
+}
+
+async function loadActors() {
+  actors.value = (await api.actors(props.world.id)).map(toActor);
+}
+
+async function createActor() {
+  const record = await api.createActor(props.world.id, `Character ${actors.value.length + 1}`, "vampire");
+  actors.value = [...actors.value, toActor(record)];
+  openSheets.value = [...openSheets.value, record.id];
+}
+
+function openSheet(id: string) {
+  if (!openSheets.value.includes(id)) {
+    openSheets.value = [...openSheets.value, id];
+  }
+}
+
+function closeSheet(id: string) {
+  openSheets.value = openSheets.value.filter((entry) => entry !== id);
+}
+
+function patchActor(id: string, set: Record<string, unknown>) {
+  void session.value?.intent("document.patch", { id, set });
+}
+
+function rollFromSheet(expression: string, reason: string) {
+  void session.value?.intent("chat.roll", { expression, reason, audience: "public" });
+}
+
+const openActors = computed(() =>
+  openSheets.value
+    .map((id) => actors.value.find((actor) => actor.id === id))
+    .filter((actor): actor is Actor => actor !== undefined),
+);
+
 function post(text: string, audience: string) {
   void session.value?.intent("chat.post", { text, audience });
 }
@@ -162,6 +209,25 @@ function record(event: EventFrame) {
       ].slice(0, 40);
       return;
     }
+  }
+
+  const document = event.payload as { id?: string; kind?: string; name?: string; data?: unknown } | undefined;
+  if (document?.id && document.kind === "actor") {
+    const index = actors.value.findIndex((actor) => actor.id === document.id);
+    if (index >= 0) {
+      const next = [...actors.value];
+      next[index] = {
+        ...next[index]!,
+        name: document.name ?? next[index]!.name,
+        data: document.data as Actor["data"],
+      };
+      actors.value = next;
+    }
+    log.value = [
+      { seq: event.seq, kind: event.kind, summary: document.name ?? "sheet updated" },
+      ...log.value,
+    ].slice(0, 40);
+    return;
   }
 
   const payload = event.payload as { id?: string; name?: string; data?: TokenRecord["data"] } | undefined;
@@ -200,6 +266,7 @@ const inviteLink = computed(() =>
 onMounted(async () => {
   members.value = await api.members(props.world.id).catch(() => []);
   await loadScenes().catch(() => undefined);
+  await loadActors().catch(() => undefined);
 
   const connection = new Session(
     props.world.id,
@@ -317,6 +384,22 @@ onBeforeUnmount(() => session.value?.close());
       </div>
 
       <div class="panel">
+        <h3 class="eyebrow">
+          Characters
+          <button v-if="isGM" class="btn btn-quiet add" type="button" @click="createActor">+</button>
+        </h3>
+        <p v-if="actors.length === 0" class="muted">None yet.</p>
+        <ul class="scenes">
+          <li v-for="actor in actors" :key="actor.id">
+            <button type="button" @click="openSheet(actor.id)">
+              <span class="dot" :class="{ live: actor.canEdit }"></span>
+              {{ actor.name }}
+            </button>
+          </li>
+        </ul>
+      </div>
+
+      <div class="panel">
         <h3 class="eyebrow">Party</h3>
         <ul>
           <li v-for="member in members" :key="member.userId">
@@ -339,6 +422,15 @@ onBeforeUnmount(() => session.value?.close());
         <ChatPanel :messages="messages" :can-whisper="isGM" @post="post" @roll="roll" />
       </div>
     </aside>
+
+    <ActorSheet
+      v-for="actor in openActors"
+      :key="actor.id"
+      :actor="actor"
+      @patch="patchActor"
+      @roll="rollFromSheet"
+      @close="closeSheet(actor.id)"
+    />
   </div>
 </template>
 

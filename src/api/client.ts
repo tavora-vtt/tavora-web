@@ -42,6 +42,15 @@ export interface TokenRecord {
   data: { x: number; y: number; width: number; height: number; disposition: string };
 }
 
+export interface ActorRecord {
+  id: string;
+  name: string;
+  subtype: string;
+  data: Record<string, unknown>;
+  ownership?: Record<string, string>;
+  canEdit: boolean;
+}
+
 export interface Ticket {
   ticket: string;
   expiresAt: string;
@@ -117,6 +126,15 @@ export const api = {
     request<TokenRecord[]>(`/api/worlds/${worldId}/scenes/${sceneId}/tokens`),
   createToken: (worldId: string, sceneId: string, name: string, x: number, y: number, disposition: string) =>
     post<TokenRecord>(`/api/worlds/${worldId}/scenes/${sceneId}/tokens`, { name, x, y, disposition }),
+
+  actors: (worldId: string) => request<ActorRecord[]>(`/api/worlds/${worldId}/actors`),
+  createActor: (worldId: string, name: string, subtype: string) =>
+    post<ActorRecord>(`/api/worlds/${worldId}/actors`, { name, subtype }),
+  setActorAccess: (worldId: string, actorId: string, userId: string, level: string) =>
+    request<void>(`/api/worlds/${worldId}/actors/${actorId}/access`, {
+      method: "PUT",
+      body: JSON.stringify({ userId, level }),
+    }),
 
   ticket: (worldId: string) => post<Ticket>("/api/session/ticket", { worldId }),
 

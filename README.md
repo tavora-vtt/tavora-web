@@ -58,6 +58,12 @@ The dock carries a chat panel: type to talk, `/r 4d6kh3` or the quick buttons to
 cards show every die, with dropped ones struck through, and the total on the right. A game
 master can tick "staff only" to keep a roll off the players' sockets.
 
+Character sheets open as draggable windows that remember where you put them, per sheet
+kind, so the next one opens where the last one was. Attributes are dot ratings, health and
+willpower are box tracks that cycle empty, superficial, aggravated. Clicking an attribute
+name rolls its pool into chat. A sheet you may read but not edit says so and its controls
+are disabled; the server enforces that regardless.
+
 The client speaks the binary Protobuf protocol, generated from `tavora-protocol` and
 consumed as a git dependency pinned to a tag. Append `?protocol=json` to the page URL to
 switch the socket to the readable encoding for debugging; the server only honours it when

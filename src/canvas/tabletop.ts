@@ -14,10 +14,19 @@ export interface TokenShape {
   disposition: string;
 }
 
+export interface CursorShape {
+  userId: string;
+  name: string;
+  x: number;
+  y: number;
+}
+
 export interface TabletopHandlers {
   onMoved?: (id: string, x: number, y: number) => void;
   onDragging?: (id: string, x: number, y: number) => void;
   onSelected?: (id: string | null) => void;
+  onPointer?: (x: number, y: number) => void;
+  onView?: (zoom: number) => void;
 }
 
 const DISPOSITION_TOKENS: Record<string, string> = {
@@ -27,10 +36,24 @@ const DISPOSITION_TOKENS: Record<string, string> = {
   neutral: "--neutral",
 };
 
+const CURSOR_PALETTE = ["--accent", "--success", "--attention", "--secret", "--danger"];
+
+const MIN_ZOOM = 0.15;
+const MAX_ZOOM = 4;
+const CURSOR_TIMEOUT = 6000;
+
 function cssColor(name: string, fallback: string): number {
   const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   const parsed = Number.parseInt(value.replace("#", ""), 16);
   return Number.isNaN(parsed) ? Number.parseInt(fallback, 16) : parsed;
+}
+
+function hashOf(value: string): number {
+  let hash = 0;
+  for (let index = 0; index < value.length; index++) {
+    hash = (hash * 31 + value.charCodeAt(index)) | 0;
+  }
+  return Math.abs(hash);
 }
 
 interface TokenNode {
@@ -39,7 +62,13 @@ interface TokenNode {
   label: Text;
   shape: TokenShape;
   dragging: boolean;
-  ghost: boolean;
+}
+
+interface CursorNode {
+  container: Container;
+  arrow: Graphics;
+  label: Text;
+  lastSeen: number;
 }
 
 export class Tabletop {
@@ -47,10 +76,14 @@ export class Tabletop {
   private world = new Container();
   private grid = new Graphics();
   private tokenLayer = new Container();
+  private cursorLayer = new Container();
   private nodes = new Map<string, TokenNode>();
+  private cursors = new Map<string, CursorNode>();
   private scene: SceneShape = { width: 2400, height: 1600, gridSize: 100 };
   private selected: string | null = null;
-  private scale = 1;
+  private panning = false;
+  private panFrom = { x: 0, y: 0 };
+  private lastBroadcast = 0;
 
   constructor(private readonly handlers: TabletopHandlers = {}) {}
 
@@ -68,27 +101,31 @@ export class Tabletop {
 
     this.world.addChild(this.grid);
     this.world.addChild(this.tokenLayer);
+    this.world.addChild(this.cursorLayer);
     this.app.stage.addChild(this.world);
 
     this.app.stage.eventMode = "static";
     this.app.stage.hitArea = { contains: () => true };
-    this.app.stage.on("pointerdown", (event: FederatedPointerEvent) => {
-      if (event.target === this.app.stage) {
-        this.select(null);
-      }
-    });
 
+    this.bindViewport(host);
     this.drawGrid();
     this.fit();
+
+    this.app.ticker.add(() => this.expireCursors());
   }
 
   get renderer(): string {
     return this.app.renderer?.type === 1 ? "webgl" : "webgpu";
   }
 
+  get zoom(): number {
+    return this.world.scale.x;
+  }
+
   destroy(): void {
     this.app.destroy(true, { children: true });
     this.nodes.clear();
+    this.cursors.clear();
   }
 
   setScene(scene: SceneShape): void {
@@ -124,9 +161,131 @@ export class Tabletop {
   showGhost(id: string, x: number, y: number): void {
     const node = this.nodes.get(id);
     if (!node || node.dragging) return;
-    node.ghost = true;
     node.container.alpha = 0.6;
     node.container.position.set(x * this.scene.gridSize, y * this.scene.gridSize);
+  }
+
+  showCursor(cursor: CursorShape): void {
+    let node = this.cursors.get(cursor.userId);
+
+    if (!node) {
+      node = this.createCursor(cursor);
+      this.cursors.set(cursor.userId, node);
+      this.cursorLayer.addChild(node.container);
+    }
+
+    node.lastSeen = performance.now();
+    node.label.text = cursor.name;
+    node.container.position.set(cursor.x, cursor.y);
+    node.container.scale.set(1 / this.world.scale.x);
+    node.container.visible = true;
+  }
+
+  dropCursor(userId: string): void {
+    const node = this.cursors.get(userId);
+    if (!node) return;
+    node.container.destroy({ children: true });
+    this.cursors.delete(userId);
+  }
+
+  private expireCursors(): void {
+    const now = performance.now();
+    for (const node of this.cursors.values()) {
+      if (now - node.lastSeen > CURSOR_TIMEOUT) {
+        node.container.visible = false;
+      }
+    }
+  }
+
+  private createCursor(cursor: CursorShape): CursorNode {
+    const container = new Container();
+    const arrow = new Graphics();
+    const paletteEntry = CURSOR_PALETTE[hashOf(cursor.userId) % CURSOR_PALETTE.length];
+    const color = cssColor(paletteEntry ?? "--accent", "5b4be8");
+
+    arrow.moveTo(0, 0).lineTo(0, 16).lineTo(4.5, 12).lineTo(11, 11).closePath().fill({ color });
+
+    const label = new Text({
+      text: cursor.name,
+      style: new TextStyle({
+        fontFamily: "IBM Plex Sans, sans-serif",
+        fontSize: 11,
+        fontWeight: "600",
+        fill: color,
+      }),
+    });
+    label.position.set(13, 9);
+
+    container.addChild(arrow);
+    container.addChild(label);
+    container.eventMode = "none";
+
+    return { container, arrow, label, lastSeen: performance.now() };
+  }
+
+  private bindViewport(host: HTMLElement): void {
+    this.app.stage.on("pointerdown", (event: FederatedPointerEvent) => {
+      if (event.target !== this.app.stage) return;
+
+      this.select(null);
+      this.panning = true;
+      this.panFrom = {
+        x: event.global.x - this.world.position.x,
+        y: event.global.y - this.world.position.y,
+      };
+      host.style.cursor = "grabbing";
+    });
+
+    this.app.stage.on("pointermove", (event: FederatedPointerEvent) => {
+      if (this.panning) {
+        this.world.position.set(event.global.x - this.panFrom.x, event.global.y - this.panFrom.y);
+        return;
+      }
+
+      const now = performance.now();
+      if (now - this.lastBroadcast < 50) return;
+      this.lastBroadcast = now;
+
+      const point = this.world.toLocal(event.global);
+      this.handlers.onPointer?.(point.x, point.y);
+    });
+
+    const stopPan = () => {
+      this.panning = false;
+      host.style.cursor = "";
+    };
+    this.app.stage.on("pointerup", stopPan);
+    this.app.stage.on("pointerupoutside", stopPan);
+
+    host.addEventListener(
+      "wheel",
+      (event: WheelEvent) => {
+        event.preventDefault();
+
+        const rect = host.getBoundingClientRect();
+        const pointer = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+        const before = this.world.toLocal(pointer);
+
+        const factor = event.deltaY < 0 ? 1.12 : 1 / 1.12;
+        const next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, this.world.scale.x * factor));
+        this.world.scale.set(next);
+
+        const after = this.world.toLocal(pointer);
+        this.world.position.x += (after.x - before.x) * next;
+        this.world.position.y += (after.y - before.y) * next;
+
+        this.rescaleCursors();
+        this.handlers.onView?.(next);
+      },
+      { passive: false },
+    );
+  }
+
+  private rescaleCursors(): void {
+    const inverse = 1 / this.world.scale.x;
+    for (const node of this.cursors.values()) {
+      node.container.scale.set(inverse);
+    }
   }
 
   private select(id: string | null): void {
@@ -148,7 +307,6 @@ export class Tabletop {
     }
 
     node.shape = token;
-    node.ghost = false;
     node.container.alpha = 1;
 
     if (!node.dragging) {
@@ -191,7 +349,7 @@ export class Tabletop {
     container.eventMode = "static";
     container.cursor = "grab";
 
-    const node: TokenNode = { container, ring, label, shape: token, dragging: false, ghost: false };
+    const node: TokenNode = { container, ring, label, shape: token, dragging: false };
     this.bindDrag(node);
     return node;
   }
@@ -271,17 +429,20 @@ export class Tabletop {
     if (!view) return;
 
     const padding = 32;
-    this.scale = Math.min(
+    const scale = Math.min(
       (view.width - padding) / this.scene.width,
       (view.height - padding) / this.scene.height,
       1,
     );
 
-    this.world.scale.set(this.scale);
+    this.world.scale.set(scale);
     this.world.position.set(
-      (view.width - this.scene.width * this.scale) / 2,
-      (view.height - this.scene.height * this.scale) / 2,
+      (view.width - this.scene.width * scale) / 2,
+      (view.height - this.scene.height * scale) / 2,
     );
+
+    this.rescaleCursors();
+    this.handlers.onView?.(scale);
   }
 
   repaint(): void {

@@ -44,6 +44,11 @@ authoritative `scene.token.move` intent on release, so other clients see the tok
 and then land where the server says it landed. The renderer prefers WebGPU and falls back
 to WebGL; the badge in the corner says which one it got.
 
+Drag empty space to pan, wheel to zoom anchored at the pointer, Fit to frame the scene
+again. Pointer positions go out on the ephemeral lane at 20 Hz, so everyone at the table
+sees everyone else's cursor with a name label; a cursor that stops arriving fades out after
+six seconds rather than lingering forever.
+
 The client speaks the readable JSON protocol for now, so the dev server sets
 `TAVORA_PROTOCOL_JSON=1`. Protobuf on the client follows once `tavora-protocol` generates
 its TypeScript bindings.

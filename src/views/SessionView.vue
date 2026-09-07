@@ -106,6 +106,15 @@ function previewMove(id: string, x: number, y: number) {
   session.value?.ephemeral("token.drag", `token:${id}`, { tokenId: id, x, y });
 }
 
+function broadcastPointer(x: number, y: number) {
+  session.value?.ephemeral("cursor", `cursor:${props.identity.id}`, {
+    userId: props.identity.id,
+    name: props.identity.username,
+    x,
+    y,
+  });
+}
+
 function record(event: EventFrame) {
   sequence.value = event.seq;
 
@@ -160,8 +169,21 @@ onMounted(async () => {
       },
       onEvent: record,
       onEphemeral: (frame) => {
-        const payload = frame.payload as { tokenId?: string; x?: number; y?: number } | undefined;
-        if (payload?.tokenId !== undefined && payload.x !== undefined && payload.y !== undefined) {
+        const payload = frame.payload as
+          | { tokenId?: string; userId?: string; name?: string; x?: number; y?: number }
+          | undefined;
+        if (payload?.x === undefined || payload.y === undefined) return;
+
+        if (frame.kind === "cursor" && payload.userId) {
+          canvas.value?.showCursor({
+            userId: payload.userId,
+            name: payload.name ?? "",
+            x: payload.x,
+            y: payload.y,
+          });
+          return;
+        }
+        if (payload.tokenId) {
           canvas.value?.showGhost(payload.tokenId, payload.x, payload.y);
         }
       },
@@ -213,6 +235,7 @@ onBeforeUnmount(() => session.value?.close());
         :tokens="tokens"
         @moved="moveToken"
         @dragging="previewMove"
+        @pointer="broadcastPointer"
         @selected="(id) => (selected = id)"
       />
       <div v-else class="empty">

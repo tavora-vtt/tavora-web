@@ -77,6 +77,20 @@ The D tool draws doors instead of plain walls. A door carries a handle on the ma
 game master clicks to open or close it, and everyone's view updates in the same breath:
 tokens behind it appear or vanish without a reload.
 
+The Art panel uploads a map or a portrait and shows what the world holds. Clicking a
+thumbnail sends it wherever you are pointed: to the selected token, or to the map itself
+when nothing is selected. The panel says which, so the click is never a guess. Both go out
+as document patches, so every other seat sees the new art without reloading, and the map
+resizes the scene to its own dimensions.
+
+Art is decoded here rather than through the renderer's asset loader, because a
+content-addressed URL carries no file extension for a loader to recognize. Textures are
+kept in an LRU keyed by that URL and evicted when it fills. A map sits under the grid,
+which drops its ground fill and thins its lattice so the art keeps the colours it was
+uploaded with. A portrait is cropped into the disposition ring, and token names carry an
+outline in the interface's own background colour so they stay readable over a dark map, a
+bright one, and either theme.
+
 The client speaks the binary Protobuf protocol, generated from `tavora-protocol` and
 consumed as a git dependency pinned to a tag. Append `?protocol=json` to the page URL to
 switch the socket to the readable encoding for debugging; the server only honours it when
@@ -84,4 +98,5 @@ it was started with `TAVORA_PROTOCOL_JSON=1`, which `make dev` does.
 
 ## Status
 
-Milestone M0. The canvas lands next.
+Milestone M1. The canvas is live: maps, tokens with art, walls, doors, line of sight,
+combat order, character sheets and chat.

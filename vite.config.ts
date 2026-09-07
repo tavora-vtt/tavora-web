@@ -9,6 +9,7 @@ export default defineConfig({
       "/healthz": "http://localhost:30000",
       "/readyz": "http://localhost:30000",
       "/api": "http://localhost:30000",
+      "/assets": "http://localhost:30000",
       "/ws": { target: "ws://localhost:30000", ws: true },
     },
   },

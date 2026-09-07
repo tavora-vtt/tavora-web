@@ -33,13 +33,37 @@ export interface Scene {
   id: string;
   name: string;
   active: boolean;
-  data: { width: number; height: number; gridSize: number; gridType: string };
+  data: {
+    width: number;
+    height: number;
+    gridSize: number;
+    gridType: string;
+    background?: string;
+  };
 }
 
 export interface TokenRecord {
   id: string;
   name: string;
-  data: { x: number; y: number; width: number; height: number; disposition: string };
+  img?: string;
+  data: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    disposition: string;
+  };
+}
+
+export interface AssetRecord {
+  id: string;
+  mime: string;
+  bytes: number;
+  width: number;
+  height: number;
+  url: string;
+  thumbnail?: string;
+  createdAt: string;
 }
 
 export interface WallRecord {
@@ -82,9 +106,10 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const sendsJSON = typeof init.body === "string";
   const response = await fetch(path, {
     credentials: "same-origin",
-    headers: init.body ? { "Content-Type": "application/json" } : undefined,
+    headers: sendsJSON ? { "Content-Type": "application/json" } : undefined,
     ...init,
   });
 
@@ -96,7 +121,11 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const body = text ? JSON.parse(text) : {};
 
   if (!response.ok) {
-    throw new ApiError(response.status, body.code ?? "error", body.messageKey ?? "core.api.unknown");
+    throw new ApiError(
+      response.status,
+      body.code ?? "error",
+      body.messageKey ?? "core.api.unknown",
+    );
   }
 
   return body as T;
@@ -120,39 +149,91 @@ export const api = {
   createWorld: (title: string, systemId: string) =>
     post<World>("/api/worlds", { title, systemId }),
 
-  members: (worldId: string) => request<Member[]>(`/api/worlds/${worldId}/members`),
-  invites: (worldId: string) => request<Invite[]>(`/api/worlds/${worldId}/invites`),
+  members: (worldId: string) =>
+    request<Member[]>(`/api/worlds/${worldId}/members`),
+  invites: (worldId: string) =>
+    request<Invite[]>(`/api/worlds/${worldId}/invites`),
   createInvite: (worldId: string, role: string, maxUses: number) =>
     post<Invite>(`/api/worlds/${worldId}/invites`, { role, maxUses }),
   revokeInvite: (worldId: string, inviteId: string) =>
-    request<void>(`/api/worlds/${worldId}/invites/${inviteId}`, { method: "DELETE" }),
+    request<void>(`/api/worlds/${worldId}/invites/${inviteId}`, {
+      method: "DELETE",
+    }),
 
   previewInvite: (token: string) =>
-    request<{ worldTitle: string; role: string; valid: boolean }>(`/api/invites/${token}`),
+    request<{ worldTitle: string; role: string; valid: boolean }>(
+      `/api/invites/${token}`,
+    ),
   acceptInvite: (token: string, username: string, password: string) =>
     post<Identity>(`/api/invites/${token}/accept`, { username, password }),
 
-  scenes: (worldId: string) => request<Scene[]>(`/api/worlds/${worldId}/scenes`),
+  scenes: (worldId: string) =>
+    request<Scene[]>(`/api/worlds/${worldId}/scenes`),
   createScene: (worldId: string, name: string) =>
     post<Scene>(`/api/worlds/${worldId}/scenes`, { name }),
   tokens: (worldId: string, sceneId: string) =>
     request<TokenRecord[]>(`/api/worlds/${worldId}/scenes/${sceneId}/tokens`),
-  createToken: (worldId: string, sceneId: string, name: string, x: number, y: number, disposition: string) =>
-    post<TokenRecord>(`/api/worlds/${worldId}/scenes/${sceneId}/tokens`, { name, x, y, disposition }),
+  createToken: (
+    worldId: string,
+    sceneId: string,
+    name: string,
+    x: number,
+    y: number,
+    disposition: string,
+    img = "",
+  ) =>
+    post<TokenRecord>(`/api/worlds/${worldId}/scenes/${sceneId}/tokens`, {
+      name,
+      x,
+      y,
+      disposition,
+      img,
+    }),
 
   walls: (worldId: string, sceneId: string) =>
     request<WallRecord[]>(`/api/worlds/${worldId}/scenes/${sceneId}/walls`),
-  createWall: (worldId: string, sceneId: string, x1: number, y1: number, x2: number, y2: number, door: boolean) =>
-    post<WallRecord>(`/api/worlds/${worldId}/scenes/${sceneId}/walls`, { x1, y1, x2, y2, door }),
+  createWall: (
+    worldId: string,
+    sceneId: string,
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number,
+    door: boolean,
+  ) =>
+    post<WallRecord>(`/api/worlds/${worldId}/scenes/${sceneId}/walls`, {
+      x1,
+      y1,
+      x2,
+      y2,
+      door,
+    }),
 
-  actors: (worldId: string) => request<ActorRecord[]>(`/api/worlds/${worldId}/actors`),
+  actors: (worldId: string) =>
+    request<ActorRecord[]>(`/api/worlds/${worldId}/actors`),
   createActor: (worldId: string, name: string, subtype: string) =>
     post<ActorRecord>(`/api/worlds/${worldId}/actors`, { name, subtype }),
-  setActorAccess: (worldId: string, actorId: string, userId: string, level: string) =>
-    request<void>(`/api/worlds/${worldId}/actors/${actorId}/access`, {
+  setDocumentAccess: (
+    worldId: string,
+    documentId: string,
+    userId: string,
+    level: string,
+  ) =>
+    request<void>(`/api/worlds/${worldId}/documents/${documentId}/access`, {
       method: "PUT",
       body: JSON.stringify({ userId, level }),
     }),
+
+  assets: (worldId: string) =>
+    request<AssetRecord[]>(`/api/worlds/${worldId}/assets`),
+  uploadAsset: (worldId: string, file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return request<AssetRecord>(`/api/worlds/${worldId}/assets`, {
+      method: "POST",
+      body: form,
+    });
+  },
 
   ticket: (worldId: string) => post<Ticket>("/api/session/ticket", { worldId }),
 

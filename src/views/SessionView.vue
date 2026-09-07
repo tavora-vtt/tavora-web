@@ -1,6 +1,16 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from "vue";
-import { api, type ActorRecord, type Identity, type Member, type Scene, type TokenRecord, type World } from "../api/client";
+import {
+  api,
+  type ActorRecord,
+  type AssetRecord,
+  type Identity,
+  type Member,
+  type Scene,
+  type TokenRecord,
+  type World,
+} from "../api/client";
+import { ApiError } from "../api/client";
 import { Session, type ConnectionState, type EventFrame } from "../net/socket";
 import type { SceneShape, TokenShape, WallShape } from "../canvas/tabletop";
 import BrandMark from "../components/BrandMark.vue";
@@ -48,6 +58,9 @@ const selected = ref<string | null>(null);
 const scenes = ref<Scene[]>([]);
 const scene = ref<Scene | null>(null);
 const tokens = ref<TokenShape[]>([]);
+const assets = ref<AssetRecord[]>([]);
+const uploading = ref(false);
+const uploadError = ref("");
 
 const session = shallowRef<Session | null>(null);
 const canvas = ref<InstanceType<typeof TabletopCanvas> | null>(null);
@@ -60,6 +73,7 @@ const shape = computed<SceneShape | null>(() =>
         width: scene.value.data.width,
         height: scene.value.data.height,
         gridSize: scene.value.data.gridSize,
+        background: scene.value.data.background,
       }
     : null,
 );
@@ -81,15 +95,109 @@ function toShape(record: TokenRecord): TokenShape {
   return {
     id: record.id,
     name: record.name,
+    img: record.img,
     x: record.data?.x ?? 0,
     y: record.data?.y ?? 0,
     disposition: record.data?.disposition ?? "neutral",
   };
 }
 
+async function loadAssets() {
+  assets.value = await api.assets(props.world.id);
+}
+
+async function uploadArt(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = "";
+  if (!file) return;
+
+  uploading.value = true;
+  uploadError.value = "";
+  try {
+    const record = await api.uploadAsset(props.world.id, file);
+    assets.value = [
+      record,
+      ...assets.value.filter((entry) => entry.id !== record.id),
+    ];
+  } catch (error) {
+    uploadError.value =
+      error instanceof ApiError ? uploadMessage(error) : "Upload failed.";
+  } finally {
+    uploading.value = false;
+  }
+}
+
+function uploadMessage(error: ApiError): string {
+  switch (error.messageKey) {
+    case "core.asset.unsupportedFormat":
+      return "Only png, jpeg and gif images are accepted.";
+    case "core.asset.tooLarge":
+      return "That image is too large.";
+    case "core.asset.worldIsFull":
+      return "This world has no room left for art.";
+    case "core.asset.brokenImage":
+      return "That file is not a readable image.";
+    default:
+      return "Upload failed.";
+  }
+}
+
+/**
+ * useArt sends the picked image to the selected token, or to the map itself when nothing
+ * is selected. Both go out as document patches, so every other seat sees the change
+ * without reloading.
+ */
+function useArt(asset: AssetRecord) {
+  if (!isGM.value) return;
+
+  if (selected.value) {
+    void session.value?.intent("document.patch", {
+      id: selected.value,
+      img: asset.url,
+    });
+    return;
+  }
+  if (scene.value) {
+    void session.value?.intent("document.patch", {
+      id: scene.value.id,
+      set: { background: asset.url, width: asset.width, height: asset.height },
+    });
+  }
+}
+
+function clearArt() {
+  if (!isGM.value) return;
+
+  if (selected.value) {
+    void session.value?.intent("document.patch", {
+      id: selected.value,
+      img: "",
+    });
+    return;
+  }
+  if (scene.value) {
+    void session.value?.intent("document.patch", {
+      id: scene.value.id,
+      set: { background: "" },
+    });
+  }
+}
+
+const artTarget = computed(() => {
+  if (selected.value) {
+    return (
+      tokens.value.find((token) => token.id === selected.value)?.name ??
+      "the selected token"
+    );
+  }
+  return scene.value ? scene.value.name : "no scene";
+});
+
 async function loadScenes() {
   scenes.value = await api.scenes(props.world.id);
-  const active = scenes.value.find((entry) => entry.active) ?? scenes.value[0] ?? null;
+  const active =
+    scenes.value.find((entry) => entry.active) ?? scenes.value[0] ?? null;
   await openScene(active);
 }
 
@@ -118,15 +226,34 @@ function toggleDoor(id: string) {
 
 async function addWall(x1: number, y1: number, x2: number, y2: number) {
   if (!scene.value || !isGM.value) return;
-  const record = await api.createWall(props.world.id, scene.value.id, x1, y1, x2, y2, doorTool.value);
+  const record = await api.createWall(
+    props.world.id,
+    scene.value.id,
+    x1,
+    y1,
+    x2,
+    y2,
+    doorTool.value,
+  );
   walls.value = [
     ...walls.value,
-    { id: record.id, x1, y1, x2, y2, door: record.data.door, doorOpen: record.data.doorOpen },
+    {
+      id: record.id,
+      x1,
+      y1,
+      x2,
+      y2,
+      door: record.data.door,
+      doorOpen: record.data.doorOpen,
+    },
   ];
 }
 
 async function createScene() {
-  const created = await api.createScene(props.world.id, `Scene ${scenes.value.length + 1}`);
+  const created = await api.createScene(
+    props.world.id,
+    `Scene ${scenes.value.length + 1}`,
+  );
   scenes.value = [...scenes.value, created];
   await activateScene(created);
 }
@@ -189,7 +316,11 @@ async function loadActors() {
 }
 
 async function createActor() {
-  const record = await api.createActor(props.world.id, `Character ${actors.value.length + 1}`, "vampire");
+  const record = await api.createActor(
+    props.world.id,
+    `Character ${actors.value.length + 1}`,
+    "vampire",
+  );
   actors.value = [...actors.value, toActor(record)];
   openSheets.value = [...openSheets.value, record.id];
 }
@@ -209,7 +340,11 @@ function patchActor(id: string, set: Record<string, unknown>) {
 }
 
 function rollFromSheet(expression: string, reason: string) {
-  void session.value?.intent("chat.roll", { expression, reason, audience: "public" });
+  void session.value?.intent("chat.roll", {
+    expression,
+    reason,
+    audience: "public",
+  });
 }
 
 const openActors = computed(() =>
@@ -232,7 +367,9 @@ function endCombat() {
 }
 
 const activeCombatant = computed(() =>
-  combat.value?.active ? (combat.value.combatants[combat.value.turn]?.id ?? null) : null,
+  combat.value?.active
+    ? (combat.value.combatants[combat.value.turn]?.id ?? null)
+    : null,
 );
 
 function post(text: string, audience: string) {
@@ -248,17 +385,23 @@ function record(event: EventFrame) {
 
   if (event.kind === "chat.message") {
     const message = event.payload as ChatMessage | undefined;
-    if (message?.id && !messages.value.some((entry) => entry.id === message.id)) {
+    if (
+      message?.id &&
+      !messages.value.some((entry) => entry.id === message.id)
+    ) {
       messages.value = [...messages.value, message].slice(-200);
     }
     return;
   }
 
   if (event.kind === "scene.door.toggle") {
-    const door = event.payload as { wallId?: string; doorOpen?: boolean } | undefined;
+    const door = event.payload as
+      { wallId?: string; doorOpen?: boolean } | undefined;
     if (door?.wallId !== undefined) {
       walls.value = walls.value.map((wall) =>
-        wall.id === door.wallId ? { ...wall, doorOpen: door.doorOpen ?? false } : wall,
+        wall.id === door.wallId
+          ? { ...wall, doorOpen: door.doorOpen ?? false }
+          : wall,
       );
     }
     return;
@@ -269,7 +412,9 @@ function record(event: EventFrame) {
       | { tokens?: { id: string; name: string; data: TokenRecord["data"] }[] }
       | undefined;
     if (update?.tokens) {
-      tokens.value = update.tokens.map((record) => toShape(record as TokenRecord));
+      tokens.value = update.tokens.map((record) =>
+        toShape(record as TokenRecord),
+      );
     }
     return;
   }
@@ -290,23 +435,30 @@ function record(event: EventFrame) {
   }
 
   if (event.kind === "scene.activate") {
-    const activated = event.payload as { sceneId?: string; name?: string } | undefined;
+    const activated = event.payload as
+      { sceneId?: string; name?: string } | undefined;
     if (activated?.sceneId) {
       scenes.value = scenes.value.map((entry) => ({
         ...entry,
         active: entry.id === activated.sceneId,
       }));
-      const target = scenes.value.find((entry) => entry.id === activated.sceneId) ?? null;
+      const target =
+        scenes.value.find((entry) => entry.id === activated.sceneId) ?? null;
       void openScene(target);
       log.value = [
-        { seq: event.seq, kind: event.kind, summary: activated.name ?? "scene changed" },
+        {
+          seq: event.seq,
+          kind: event.kind,
+          summary: activated.name ?? "scene changed",
+        },
         ...log.value,
       ].slice(0, 40);
       return;
     }
   }
 
-  const document = event.payload as { id?: string; kind?: string; name?: string; data?: unknown } | undefined;
+  const document = event.payload as
+    { id?: string; kind?: string; name?: string; data?: unknown } | undefined;
   if (document?.id && document.kind === "actor") {
     const index = actors.value.findIndex((actor) => actor.id === document.id);
     if (index >= 0) {
@@ -319,17 +471,35 @@ function record(event: EventFrame) {
       actors.value = next;
     }
     log.value = [
-      { seq: event.seq, kind: event.kind, summary: document.name ?? "sheet updated" },
+      {
+        seq: event.seq,
+        kind: event.kind,
+        summary: document.name ?? "sheet updated",
+      },
       ...log.value,
     ].slice(0, 40);
     return;
   }
 
-  const payload = event.payload as { id?: string; name?: string; data?: TokenRecord["data"] } | undefined;
+  if (document?.id && document.kind === "scene") {
+    const patched = document.data as Scene["data"] | undefined;
+    scenes.value = scenes.value.map((entry) =>
+      entry.id === document.id && patched ? { ...entry, data: patched } : entry,
+    );
+    if (scene.value?.id === document.id && patched) {
+      scene.value = { ...scene.value, data: patched };
+    }
+    return;
+  }
+
+  const payload = event.payload as
+    | { id?: string; name?: string; img?: string; data?: TokenRecord["data"] }
+    | undefined;
   if (payload?.id && payload.data) {
     const shapeFromEvent: TokenShape = {
       id: payload.id,
       name: payload.name ?? "",
+      img: payload.img,
       x: payload.data.x ?? 0,
       y: payload.data.y ?? 0,
       disposition: payload.data.disposition ?? "neutral",
@@ -362,6 +532,7 @@ onMounted(async () => {
   members.value = await api.members(props.world.id).catch(() => []);
   await loadScenes().catch(() => undefined);
   await loadActors().catch(() => undefined);
+  await loadAssets().catch(() => undefined);
 
   const connection = new Session(
     props.world.id,
@@ -378,7 +549,13 @@ onMounted(async () => {
       onEvent: record,
       onEphemeral: (frame) => {
         const payload = frame.payload as
-          | { tokenId?: string; userId?: string; name?: string; x?: number; y?: number }
+          | {
+              tokenId?: string;
+              userId?: string;
+              name?: string;
+              x?: number;
+              y?: number;
+            }
           | undefined;
         if (payload?.x === undefined || payload.y === undefined) return;
 
@@ -423,16 +600,30 @@ onBeforeUnmount(() => session.value?.close());
       </span>
       <ThemeToggle />
       <span class="muted">{{ identity.username }} · {{ role }}</span>
-      <button class="btn btn-quiet" type="button" @click="emit('leave')">Leave</button>
+      <button class="btn btn-quiet" type="button" @click="emit('leave')">
+        Leave
+      </button>
     </header>
 
     <nav class="rail" aria-label="Tools">
-      <button v-for="tool in ['select', 'measure', 'ping']" :key="tool" :title="tool" type="button">
+      <button
+        v-for="tool in ['select', 'measure', 'ping']"
+        :key="tool"
+        :title="tool"
+        type="button"
+      >
         <span aria-hidden="true">{{ tool[0]?.toUpperCase() }}</span>
         <span class="sr">{{ tool }}</span>
       </button>
       <div class="railgap"></div>
-      <button v-if="isGM && scene" title="Add token" type="button" @click="addToken">+</button>
+      <button
+        v-if="isGM && scene"
+        title="Add token"
+        type="button"
+        @click="addToken"
+      >
+        +
+      </button>
       <button
         v-if="isGM && scene"
         title="Draw walls"
@@ -449,7 +640,10 @@ onBeforeUnmount(() => session.value?.close());
         type="button"
         :aria-pressed="doorTool"
         :class="{ active: doorTool }"
-        @click="doorTool = !doorTool; wallTool = doorTool || wallTool"
+        @click="
+          doorTool = !doorTool;
+          wallTool = doorTool || wallTool;
+        "
       >
         D
       </button>
@@ -473,7 +667,12 @@ onBeforeUnmount(() => session.value?.close());
       <div v-else class="empty">
         <p class="eyebrow">no scene</p>
         <p class="muted">This world has no scene yet.</p>
-        <button v-if="isGM" class="btn btn-primary" type="button" @click="createScene">
+        <button
+          v-if="isGM"
+          class="btn btn-primary"
+          type="button"
+          @click="createScene"
+        >
           Create a scene
         </button>
         <p v-else class="muted">Ask the game master to create one.</p>
@@ -484,7 +683,14 @@ onBeforeUnmount(() => session.value?.close());
       <div class="panel">
         <h3 class="eyebrow">
           Scenes
-          <button v-if="isGM" class="btn btn-quiet add" type="button" @click="createScene">+</button>
+          <button
+            v-if="isGM"
+            class="btn btn-quiet add"
+            type="button"
+            @click="createScene"
+          >
+            +
+          </button>
         </h3>
         <p v-if="scenes.length === 0" class="muted">None yet.</p>
         <ul class="scenes">
@@ -505,7 +711,9 @@ onBeforeUnmount(() => session.value?.close());
       <div v-if="combat?.active || isGM" class="panel">
         <h3 class="eyebrow">
           Combat
-          <span v-if="combat?.active" class="round mono">round {{ combat.round }}</span>
+          <span v-if="combat?.active" class="round mono"
+            >round {{ combat.round }}</span
+          >
         </h3>
 
         <ul v-if="combat?.active" class="order">
@@ -522,20 +730,74 @@ onBeforeUnmount(() => session.value?.close());
         <p v-else class="muted">Not fighting.</p>
 
         <div v-if="isGM" class="row">
-          <button v-if="!combat?.active" class="btn btn-quiet" type="button" :disabled="!scene" @click="startCombat">
+          <button
+            v-if="!combat?.active"
+            class="btn btn-quiet"
+            type="button"
+            :disabled="!scene"
+            @click="startCombat"
+          >
             Roll initiative
           </button>
           <template v-else>
-            <button class="btn btn-primary" type="button" @click="nextTurn">Next turn</button>
-            <button class="btn btn-quiet" type="button" @click="endCombat">End</button>
+            <button class="btn btn-primary" type="button" @click="nextTurn">
+              Next turn
+            </button>
+            <button class="btn btn-quiet" type="button" @click="endCombat">
+              End
+            </button>
           </template>
         </div>
+      </div>
+
+      <div v-if="isGM" class="panel">
+        <h3 class="eyebrow">
+          Art
+          <label class="btn btn-quiet add" :class="{ busy: uploading }">
+            {{ uploading ? "…" : "+" }}
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/gif"
+              @change="uploadArt"
+            />
+          </label>
+        </h3>
+
+        <p class="muted target">
+          Pick one for <strong>{{ artTarget }}</strong>
+        </p>
+        <p v-if="uploadError" class="muted warn">{{ uploadError }}</p>
+
+        <div v-if="assets.length" class="gallery">
+          <button
+            v-for="asset in assets"
+            :key="asset.id"
+            type="button"
+            class="tile"
+            :title="`${asset.width} by ${asset.height}`"
+            @click="useArt(asset)"
+          >
+            <img :src="asset.thumbnail ?? asset.url" :alt="''" loading="lazy" />
+          </button>
+        </div>
+        <p v-else class="muted">Upload a map or a portrait.</p>
+
+        <button class="btn btn-quiet clear" type="button" @click="clearArt">
+          Clear {{ selected ? "token art" : "the map" }}
+        </button>
       </div>
 
       <div class="panel">
         <h3 class="eyebrow">
           Characters
-          <button v-if="isGM" class="btn btn-quiet add" type="button" @click="createActor">+</button>
+          <button
+            v-if="isGM"
+            class="btn btn-quiet add"
+            type="button"
+            @click="createActor"
+          >
+            +
+          </button>
         </h3>
         <p v-if="actors.length === 0" class="muted">None yet.</p>
         <ul class="scenes">
@@ -557,7 +819,12 @@ onBeforeUnmount(() => session.value?.close());
             <em class="muted">{{ member.role }}</em>
           </li>
         </ul>
-        <button v-if="isGM" class="btn btn-quiet invite" type="button" @click="createInvite">
+        <button
+          v-if="isGM"
+          class="btn btn-quiet invite"
+          type="button"
+          @click="createInvite"
+        >
           Create invite link
         </button>
         <p v-if="inviteLink" class="mono link">{{ inviteLink }}</p>
@@ -568,7 +835,12 @@ onBeforeUnmount(() => session.value?.close());
           Chat · seq {{ sequence }}
           <em v-if="selected" class="mono selected">{{ selected }}</em>
         </h3>
-        <ChatPanel :messages="messages" :can-whisper="isGM" @post="post" @roll="roll" />
+        <ChatPanel
+          :messages="messages"
+          :can-whisper="isGM"
+          @post="post"
+          @roll="roll"
+        />
       </div>
     </aside>
 
@@ -760,6 +1032,56 @@ onBeforeUnmount(() => session.value?.close());
   display: flex;
   align-items: center;
   gap: 7px;
+}
+
+.target strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.warn {
+  color: var(--danger);
+}
+
+.gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
+  gap: 6px;
+}
+
+.tile {
+  aspect-ratio: 1;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-input);
+  background: var(--chrome-raised);
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.tile:hover {
+  border-color: var(--accent);
+}
+
+.tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.add input[type="file"] {
+  display: none;
+}
+
+.add.busy {
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+.clear {
+  margin-block-start: 8px;
+  width: 100%;
 }
 
 .panel li em {

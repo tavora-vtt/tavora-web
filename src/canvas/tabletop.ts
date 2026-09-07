@@ -1,9 +1,20 @@
-import { Application, Container, Graphics, Text, TextStyle, type FederatedPointerEvent } from "pixi.js";
+import {
+  Application,
+  Container,
+  Graphics,
+  Sprite,
+  Text,
+  TextStyle,
+  type FederatedPointerEvent,
+} from "pixi.js";
+
+import { TextureCache } from "./textures";
 
 export interface SceneShape {
   width: number;
   height: number;
   gridSize: number;
+  background?: string;
 }
 
 export interface TokenShape {
@@ -12,6 +23,7 @@ export interface TokenShape {
   x: number;
   y: number;
   disposition: string;
+  img?: string;
 }
 
 export interface WallShape {
@@ -48,14 +60,33 @@ const DISPOSITION_TOKENS: Record<string, string> = {
   neutral: "--neutral",
 };
 
-const CURSOR_PALETTE = ["--accent", "--success", "--attention", "--secret", "--danger"];
+const CURSOR_PALETTE = [
+  "--accent",
+  "--success",
+  "--attention",
+  "--secret",
+  "--danger",
+];
+
+/**
+ * labelColors outlines a token's name in the colour of the surface behind the interface,
+ * so the name stays readable over a dark map, a bright one, and either theme.
+ */
+function labelColors() {
+  return {
+    fill: cssColor("--text", "16182a"),
+    stroke: { color: cssColor("--content", "ffffff"), width: 4, join: "round" as const },
+  };
+}
 
 const MIN_ZOOM = 0.15;
 const MAX_ZOOM = 4;
 const CURSOR_TIMEOUT = 6000;
 
 function cssColor(name: string, fallback: string): number {
-  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const value = getComputedStyle(document.documentElement)
+    .getPropertyValue(name)
+    .trim();
   const parsed = Number.parseInt(value.replace("#", ""), 16);
   return Number.isNaN(parsed) ? Number.parseInt(fallback, 16) : parsed;
 }
@@ -71,6 +102,9 @@ function hashOf(value: string): number {
 interface TokenNode {
   container: Container;
   ring: Graphics;
+  art: Sprite;
+  mask: Graphics;
+  paintedArt: string;
   label: Text;
   shape: TokenShape;
   dragging: boolean;
@@ -86,6 +120,7 @@ interface CursorNode {
 export class Tabletop {
   private app = new Application();
   private world = new Container();
+  private backdrop = new Sprite();
   private grid = new Graphics();
   private wallLayer = new Graphics();
   private draftWall = new Graphics();
@@ -99,6 +134,8 @@ export class Tabletop {
   private panning = false;
   private panFrom = { x: 0, y: 0 };
   private lastBroadcast = 0;
+  private textures = new TextureCache();
+  private paintedBackground = "";
 
   constructor(private readonly handlers: TabletopHandlers = {}) {}
 
@@ -114,6 +151,7 @@ export class Tabletop {
 
     host.appendChild(this.app.canvas);
 
+    this.world.addChild(this.backdrop);
     this.world.addChild(this.grid);
     this.world.addChild(this.tokenLayer);
     this.world.addChild(this.wallLayer);
@@ -141,6 +179,7 @@ export class Tabletop {
   }
 
   destroy(): void {
+    this.textures.clear();
     this.app.destroy(true, { children: true });
     this.nodes.clear();
     this.cursors.clear();
@@ -174,7 +213,12 @@ export class Tabletop {
       this.wallLayer
         .moveTo(wall.x1 * size, wall.y1 * size)
         .lineTo(wall.x2 * size, wall.y2 * size)
-        .stroke({ color, width: 6, alpha: wall.doorOpen ? 0.35 : 0.9, cap: "round" });
+        .stroke({
+          color,
+          width: 6,
+          alpha: wall.doorOpen ? 0.35 : 0.9,
+          cap: "round",
+        });
     }
 
     this.rebuildDoorHandles();
@@ -195,7 +239,9 @@ export class Tabletop {
       const color = cssColor("--attention", "b26a00");
       const radius = Math.max(9, size * 0.16);
 
-      handle.circle(0, 0, radius).fill({ color, alpha: wall.doorOpen ? 0.3 : 0.85 });
+      handle
+        .circle(0, 0, radius)
+        .fill({ color, alpha: wall.doorOpen ? 0.3 : 0.85 });
       handle.circle(0, 0, radius).stroke({ color, width: 2 });
       handle.position.set(
         ((wall.x1 + wall.x2) / 2) * size,
@@ -219,10 +265,50 @@ export class Tabletop {
   }
 
   setScene(scene: SceneShape): void {
+    const resized =
+      scene.width !== this.scene.width ||
+      scene.height !== this.scene.height ||
+      scene.gridSize !== this.scene.gridSize;
+
     this.scene = scene;
     this.drawGrid();
     this.drawWalls();
-    this.fit();
+    void this.drawBackground();
+
+    if (resized) {
+      this.fit();
+    }
+  }
+
+  /**
+   * drawBackground paints the map image behind the grid. The grid keeps a faint ink over
+   * the art so a map that already has one does not end up with two competing lattices.
+   */
+  private async drawBackground(): Promise<void> {
+    const source = this.scene.background ?? "";
+    if (source === this.paintedBackground) {
+      return;
+    }
+    this.paintedBackground = source;
+
+    if (!source) {
+      this.backdrop.visible = false;
+      return;
+    }
+
+    const texture = await this.textures.load(source);
+    if (this.paintedBackground !== source) {
+      return;
+    }
+    if (!texture) {
+      this.backdrop.visible = false;
+      return;
+    }
+
+    this.backdrop.texture = texture;
+    this.backdrop.position.set(0, 0);
+    this.backdrop.setSize(this.scene.width, this.scene.height);
+    this.backdrop.visible = true;
   }
 
   setTokens(tokens: TokenShape[]): void {
@@ -253,7 +339,10 @@ export class Tabletop {
     const node = this.nodes.get(id);
     if (!node || node.dragging) return;
     node.container.alpha = 0.6;
-    node.container.position.set(x * this.scene.gridSize, y * this.scene.gridSize);
+    node.container.position.set(
+      x * this.scene.gridSize,
+      y * this.scene.gridSize,
+    );
   }
 
   showCursor(cursor: CursorShape): void {
@@ -291,10 +380,17 @@ export class Tabletop {
   private createCursor(cursor: CursorShape): CursorNode {
     const container = new Container();
     const arrow = new Graphics();
-    const paletteEntry = CURSOR_PALETTE[hashOf(cursor.userId) % CURSOR_PALETTE.length];
+    const paletteEntry =
+      CURSOR_PALETTE[hashOf(cursor.userId) % CURSOR_PALETTE.length];
     const color = cssColor(paletteEntry ?? "--accent", "5b4be8");
 
-    arrow.moveTo(0, 0).lineTo(0, 16).lineTo(4.5, 12).lineTo(11, 11).closePath().fill({ color });
+    arrow
+      .moveTo(0, 0)
+      .lineTo(0, 16)
+      .lineTo(4.5, 12)
+      .lineTo(11, 11)
+      .closePath()
+      .fill({ color });
 
     const label = new Text({
       text: cursor.name,
@@ -324,7 +420,12 @@ export class Tabletop {
         if (!this.wallStart) {
           this.wallStart = point;
         } else {
-          this.handlers.onWall?.(this.wallStart.x, this.wallStart.y, point.x, point.y);
+          this.handlers.onWall?.(
+            this.wallStart.x,
+            this.wallStart.y,
+            point.x,
+            point.y,
+          );
           this.wallStart = null;
           this.draftWall.clear();
         }
@@ -350,12 +451,20 @@ export class Tabletop {
           .clear()
           .moveTo(this.wallStart.x * size, this.wallStart.y * size)
           .lineTo(end.x * size, end.y * size)
-          .stroke({ color: cssColor("--accent", "5b4be8"), width: 5, alpha: 0.8, cap: "round" });
+          .stroke({
+            color: cssColor("--accent", "5b4be8"),
+            width: 5,
+            alpha: 0.8,
+            cap: "round",
+          });
         return;
       }
 
       if (this.panning) {
-        this.world.position.set(event.global.x - this.panFrom.x, event.global.y - this.panFrom.y);
+        this.world.position.set(
+          event.global.x - this.panFrom.x,
+          event.global.y - this.panFrom.y,
+        );
         return;
       }
 
@@ -380,11 +489,17 @@ export class Tabletop {
         event.preventDefault();
 
         const rect = host.getBoundingClientRect();
-        const pointer = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+        const pointer = {
+          x: event.clientX - rect.left,
+          y: event.clientY - rect.top,
+        };
         const before = this.world.toLocal(pointer);
 
         const factor = event.deltaY < 0 ? 1.12 : 1 / 1.12;
-        const next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, this.world.scale.x * factor));
+        const next = Math.min(
+          MAX_ZOOM,
+          Math.max(MIN_ZOOM, this.world.scale.x * factor),
+        );
         this.world.scale.set(next);
 
         const after = this.world.toLocal(pointer);
@@ -408,7 +523,8 @@ export class Tabletop {
   private select(id: string | null): void {
     this.selected = id;
     for (const [nodeId, node] of this.nodes) {
-      node.ring.tint = nodeId === id ? cssColor("--accent", "5b4be8") : 0xffffff;
+      node.ring.tint =
+        nodeId === id ? cssColor("--accent", "5b4be8") : 0xffffff;
       node.ring.scale.set(nodeId === id ? 1.08 : 1);
     }
     this.handlers.onSelected?.(id);
@@ -427,25 +543,84 @@ export class Tabletop {
     node.container.alpha = 1;
 
     if (!node.dragging) {
-      node.container.position.set(token.x * this.scene.gridSize, token.y * this.scene.gridSize);
+      node.container.position.set(
+        token.x * this.scene.gridSize,
+        token.y * this.scene.gridSize,
+      );
     }
     node.label.text = token.name;
     this.paintRing(node);
+    void this.paintArt(node);
   }
 
   private paintRing(node: TokenNode): void {
     const size = this.scene.gridSize;
     const radius = size * 0.42;
-    const color = cssColor(DISPOSITION_TOKENS[node.shape.disposition] ?? "--neutral", "5c6180");
+    const color = cssColor(
+      DISPOSITION_TOKENS[node.shape.disposition] ?? "--neutral",
+      "5c6180",
+    );
 
     node.ring.clear();
-    node.ring.circle(size / 2, size / 2, radius).fill({ color, alpha: 0.22 });
+    if (!node.art.visible) {
+      node.ring.circle(size / 2, size / 2, radius).fill({ color, alpha: 0.22 });
+    }
     node.ring.circle(size / 2, size / 2, radius).stroke({ color, width: 4 });
+  }
+
+  /**
+   * paintArt fits the token portrait inside the disposition ring, cropping the longer edge
+   * so a portrait of any proportion fills the circle rather than being letterboxed in it.
+   */
+  private async paintArt(node: TokenNode): Promise<void> {
+    const source = node.shape.img ?? "";
+    if (source === node.paintedArt) {
+      return;
+    }
+    node.paintedArt = source;
+
+    if (!source) {
+      node.art.visible = false;
+      this.paintRing(node);
+      return;
+    }
+
+    const texture = await this.textures.load(source);
+    if (node.paintedArt !== source || node.container.destroyed) {
+      return;
+    }
+    if (!texture) {
+      node.art.visible = false;
+      this.paintRing(node);
+      return;
+    }
+
+    const size = this.scene.gridSize;
+    const diameter = size * 0.84;
+    const cover = Math.max(diameter / texture.width, diameter / texture.height);
+
+    node.art.texture = texture;
+    node.art.anchor.set(0.5);
+    node.art.setSize(texture.width * cover, texture.height * cover);
+    node.art.position.set(size / 2, size / 2);
+    node.art.visible = true;
+
+    node.mask.clear();
+    node.mask
+      .circle(size / 2, size / 2, diameter / 2)
+      .fill({ color: 0xffffff });
+
+    this.paintRing(node);
   }
 
   private create(token: TokenShape): TokenNode {
     const container = new Container();
     const ring = new Graphics();
+    const art = new Sprite();
+    const mask = new Graphics();
+
+    art.visible = false;
+    art.mask = mask;
 
     const label = new Text({
       text: token.name,
@@ -453,20 +628,31 @@ export class Tabletop {
         fontFamily: "IBM Plex Sans, sans-serif",
         fontSize: 20,
         fontWeight: "600",
-        fill: cssColor("--text", "16182a"),
         align: "center",
+        ...labelColors(),
       }),
     });
 
     label.anchor.set(0.5, 0);
     label.position.set(this.scene.gridSize / 2, this.scene.gridSize * 0.92);
 
+    container.addChild(art);
+    container.addChild(mask);
     container.addChild(ring);
     container.addChild(label);
     container.eventMode = "static";
     container.cursor = "grab";
 
-    const node: TokenNode = { container, ring, label, shape: token, dragging: false };
+    const node: TokenNode = {
+      container,
+      ring,
+      art,
+      mask,
+      label,
+      shape: token,
+      dragging: false,
+      paintedArt: "",
+    };
     this.bindDrag(node);
     return node;
   }
@@ -479,7 +665,10 @@ export class Tabletop {
       const point = this.world.toLocal(event.global);
       node.container.position.set(point.x - offsetX, point.y - offsetY);
 
-      const cell = this.cellOf(node.container.position.x, node.container.position.y);
+      const cell = this.cellOf(
+        node.container.position.x,
+        node.container.position.y,
+      );
       this.handlers.onDragging?.(node.shape.id, cell.x, cell.y);
     };
 
@@ -491,8 +680,14 @@ export class Tabletop {
       this.app.stage.off("pointerup", end);
       this.app.stage.off("pointerupoutside", end);
 
-      const cell = this.cellOf(node.container.position.x, node.container.position.y);
-      node.container.position.set(cell.x * this.scene.gridSize, cell.y * this.scene.gridSize);
+      const cell = this.cellOf(
+        node.container.position.x,
+        node.container.position.y,
+      );
+      node.container.position.set(
+        cell.x * this.scene.gridSize,
+        cell.y * this.scene.gridSize,
+      );
       this.handlers.onMoved?.(node.shape.id, cell.x, cell.y);
     };
 
@@ -523,13 +718,21 @@ export class Tabletop {
     };
   }
 
+  /**
+   * drawGrid paints the lattice, and the bare ground under it only when no map is hung.
+   * Over a map the lattice thins out instead, so the art stays the colour it was uploaded
+   * as rather than sitting behind a wash.
+   */
   private drawGrid(): void {
     const { width, height, gridSize } = this.scene;
     const ink = cssColor("--map-ink", "c9cbdd");
     const ground = cssColor("--map-ground", "dedfec");
+    const overArt = Boolean(this.scene.background);
 
     this.grid.clear();
-    this.grid.rect(0, 0, width, height).fill({ color: ground });
+    if (!overArt) {
+      this.grid.rect(0, 0, width, height).fill({ color: ground });
+    }
 
     for (let x = 0; x <= width; x += gridSize) {
       this.grid.moveTo(x, 0).lineTo(x, height);
@@ -537,7 +740,7 @@ export class Tabletop {
     for (let y = 0; y <= height; y += gridSize) {
       this.grid.moveTo(0, y).lineTo(width, y);
     }
-    this.grid.stroke({ color: ink, width: 1, alpha: 0.9 });
+    this.grid.stroke({ color: ink, width: 1, alpha: overArt ? 0.28 : 0.9 });
     this.grid.rect(0, 0, width, height).stroke({ color: ink, width: 4 });
   }
 
@@ -567,7 +770,7 @@ export class Tabletop {
     this.drawWalls();
     for (const node of this.nodes.values()) {
       this.paintRing(node);
-      node.label.style.fill = cssColor("--text", "16182a");
+      Object.assign(node.label.style, labelColors());
     }
     this.select(this.selected);
   }

@@ -31,6 +31,19 @@ They are how the frame budget is kept, and violating them is how it disappears.
    state between it and the main thread.
 3. Sheets update by patch, not by re-render.
 
+## What is on screen today
+
+Sign-in and first-run setup, the world list with creation, and the session shell: top bar,
+tool rail, map area, and a right dock with the party and a live world event feed. The
+socket connects, shows its state and round-trip latency, and replays what it missed after a
+reconnect.
+
+The map is still a placeholder grid. The PixiJS renderer is the next piece.
+
+The client speaks the readable JSON protocol for now, so the dev server sets
+`TAVORA_PROTOCOL_JSON=1`. Protobuf on the client follows once `tavora-protocol` generates
+its TypeScript bindings.
+
 ## Status
 
-Milestone M0. Shell and canvas land next.
+Milestone M0. The canvas lands next.

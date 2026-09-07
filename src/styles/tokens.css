@@ -1,0 +1,103 @@
+:root {
+  color-scheme: light dark;
+
+  --canvas: #e9eaf2;
+  --chrome: #f2f2f7;
+  --chrome-raised: #ffffff;
+  --content: #ffffff;
+  --sunken: #f4f4f9;
+  --border-subtle: #e4e5ee;
+  --border: #d3d5e3;
+  --text: #16182a;
+  --text-2: #5c6180;
+  --text-3: #878ca8;
+
+  --accent: #5b4be8;
+  --accent-fg: #ffffff;
+  --attention: #b26a00;
+  --danger: #d13438;
+  --success: #1e7f52;
+  --secret: #7a4bc4;
+  --neutral: #5c6180;
+
+  --map-ink: #c9cbdd;
+  --map-ground: #dedfec;
+  --shadow: 0 10px 28px rgb(16 18 42 / 13%), 0 1px 2px rgb(16 18 42 / 10%);
+
+  --sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --cond: "IBM Plex Sans Condensed", "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --r-input: 4px;
+  --r-card: 6px;
+  --r-win: 10px;
+
+  --t-state: 120ms;
+  --t-panel: 180ms;
+
+  --h-ctl: 32px;
+  --h-row: 36px;
+  --pad: 12px;
+  --rail: 48px;
+  --fs: 13px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --canvas: #0b0c15;
+    --chrome: #141622;
+    --chrome-raised: #1c1f30;
+    --content: #191c2b;
+    --sunken: #12131f;
+    --border-subtle: #242840;
+    --border: #2e3350;
+    --text: #e7e8f3;
+    --text-2: #9ca1be;
+    --text-3: #6c7192;
+
+    --accent: #8b7bf5;
+    --accent-fg: #0b0c15;
+    --attention: #f5a623;
+    --danger: #f2555a;
+    --success: #3dbb80;
+    --secret: #a98bf0;
+    --neutral: #9ca1be;
+
+    --map-ink: #2a2f4a;
+    --map-ground: #151827;
+    --shadow: 0 12px 32px rgb(0 0 0 / 55%), 0 1px 2px rgb(0 0 0 / 40%);
+  }
+}
+
+:root[data-theme="dark"] {
+  --canvas: #0b0c15;
+  --chrome: #141622;
+  --chrome-raised: #1c1f30;
+  --content: #191c2b;
+  --sunken: #12131f;
+  --border-subtle: #242840;
+  --border: #2e3350;
+  --text: #e7e8f3;
+  --text-2: #9ca1be;
+  --text-3: #6c7192;
+
+  --accent: #8b7bf5;
+  --accent-fg: #0b0c15;
+  --attention: #f5a623;
+  --danger: #f2555a;
+  --success: #3dbb80;
+  --secret: #a98bf0;
+  --neutral: #9ca1be;
+
+  --map-ink: #2a2f4a;
+  --map-ground: #151827;
+  --shadow: 0 12px 32px rgb(0 0 0 / 55%), 0 1px 2px rgb(0 0 0 / 40%);
+}
+
+:root[data-density="compact"] {
+  --h-ctl: 26px;
+  --h-row: 28px;
+  --pad: 8px;
+  --rail: 44px;
+  --fs: 12px;
+}

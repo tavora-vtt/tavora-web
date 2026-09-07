@@ -1,13 +1,19 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
-import { Tabletop, type CursorShape, type SceneShape, type TokenShape } from "../canvas/tabletop";
+import { Tabletop, type CursorShape, type SceneShape, type TokenShape, type WallShape } from "../canvas/tabletop";
 
-const props = defineProps<{ scene: SceneShape | null; tokens: TokenShape[] }>();
+const props = defineProps<{
+  scene: SceneShape | null;
+  tokens: TokenShape[];
+  walls: WallShape[];
+  wallTool: boolean;
+}>();
 const emit = defineEmits<{
   (event: "moved", id: string, x: number, y: number): void;
   (event: "dragging", id: string, x: number, y: number): void;
   (event: "selected", id: string | null): void;
   (event: "pointer", x: number, y: number): void;
+  (event: "wall", x1: number, y1: number, x2: number, y2: number): void;
 }>();
 
 const host = ref<HTMLElement | null>(null);
@@ -47,6 +53,7 @@ onMounted(async () => {
     onView: (next) => {
       zoom.value = next;
     },
+    onWall: (x1, y1, x2, y2) => emit("wall", x1, y1, x2, y2),
   });
 
   await instance.mount(host.value);
@@ -55,6 +62,8 @@ onMounted(async () => {
 
   if (props.scene) instance.setScene(props.scene);
   instance.setTokens(props.tokens);
+  instance.setWalls(props.walls);
+  instance.setWallTool(props.wallTool);
 
   observer = new ResizeObserver(() => instance.fit());
   observer.observe(host.value);
@@ -74,6 +83,17 @@ watch(
   () => props.tokens,
   (tokens) => table.value?.setTokens(tokens),
   { deep: false },
+);
+
+watch(
+  () => props.walls,
+  (walls) => table.value?.setWalls(walls),
+  { deep: false },
+);
+
+watch(
+  () => props.wallTool,
+  (enabled) => table.value?.setWallTool(enabled),
 );
 
 onBeforeUnmount(() => {

@@ -42,6 +42,19 @@ export interface TokenRecord {
   data: { x: number; y: number; width: number; height: number; disposition: string };
 }
 
+export interface WallRecord {
+  id: string;
+  data: {
+    x1: number;
+    y1: number;
+    x2: number;
+    y2: number;
+    blocksSight: boolean;
+    door: boolean;
+    doorOpen: boolean;
+  };
+}
+
 export interface ActorRecord {
   id: string;
   name: string;
@@ -126,6 +139,11 @@ export const api = {
     request<TokenRecord[]>(`/api/worlds/${worldId}/scenes/${sceneId}/tokens`),
   createToken: (worldId: string, sceneId: string, name: string, x: number, y: number, disposition: string) =>
     post<TokenRecord>(`/api/worlds/${worldId}/scenes/${sceneId}/tokens`, { name, x, y, disposition }),
+
+  walls: (worldId: string, sceneId: string) =>
+    request<WallRecord[]>(`/api/worlds/${worldId}/scenes/${sceneId}/walls`),
+  createWall: (worldId: string, sceneId: string, x1: number, y1: number, x2: number, y2: number, door: boolean) =>
+    post<WallRecord>(`/api/worlds/${worldId}/scenes/${sceneId}/walls`, { x1, y1, x2, y2, door }),
 
   actors: (worldId: string) => request<ActorRecord[]>(`/api/worlds/${worldId}/actors`),
   createActor: (worldId: string, name: string, subtype: string) =>

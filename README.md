@@ -69,6 +69,10 @@ turn is the one place amber appears, which is the design system's rule: warm mea
 something needs you. The game master gets Roll initiative, Next turn and End; players see
 the order and nothing to press.
 
+The W tool on the rail draws walls: click to start, move to preview, click to finish, snapped
+to the grid. Walls render on the map, doors in amber. A token a player cannot see never
+arrives, so it is simply absent from their map rather than drawn and hidden.
+
 The client speaks the binary Protobuf protocol, generated from `tavora-protocol` and
 consumed as a git dependency pinned to a tag. Append `?protocol=json` to the page URL to
 switch the socket to the readable encoding for debugging; the server only honours it when

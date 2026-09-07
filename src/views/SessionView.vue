@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from "vue";
 import { api, type ActorRecord, type Identity, type Member, type Scene, type TokenRecord, type World } from "../api/client";
 import { Session, type ConnectionState, type EventFrame } from "../net/socket";
-import type { SceneShape, TokenShape } from "../canvas/tabletop";
+import type { SceneShape, TokenShape, WallShape } from "../canvas/tabletop";
 import BrandMark from "../components/BrandMark.vue";
 import ThemeToggle from "../components/ThemeToggle.vue";
 import TabletopCanvas from "../components/TabletopCanvas.vue";
@@ -38,6 +38,8 @@ interface Combat {
 }
 
 const combat = ref<Combat | null>(null);
+const walls = ref<WallShape[]>([]);
+const wallTool = ref(false);
 const openSheets = ref<string[]>([]);
 const inviteToken = ref("");
 const selected = ref<string | null>(null);
@@ -97,6 +99,24 @@ async function openScene(target: Scene | null) {
     return;
   }
   tokens.value = (await api.tokens(props.world.id, target.id)).map(toShape);
+  walls.value = (await api.walls(props.world.id, target.id)).map((record) => ({
+    id: record.id,
+    x1: record.data.x1,
+    y1: record.data.y1,
+    x2: record.data.x2,
+    y2: record.data.y2,
+    door: record.data.door,
+    doorOpen: record.data.doorOpen,
+  }));
+}
+
+async function addWall(x1: number, y1: number, x2: number, y2: number) {
+  if (!scene.value || !isGM.value) return;
+  const record = await api.createWall(props.world.id, scene.value.id, x1, y1, x2, y2, false);
+  walls.value = [
+    ...walls.value,
+    { id: record.id, x1, y1, x2, y2, door: record.data.door, doorOpen: record.data.doorOpen },
+  ];
 }
 
 async function createScene() {
@@ -387,6 +407,16 @@ onBeforeUnmount(() => session.value?.close());
       </button>
       <div class="railgap"></div>
       <button v-if="isGM && scene" title="Add token" type="button" @click="addToken">+</button>
+      <button
+        v-if="isGM && scene"
+        title="Draw walls"
+        type="button"
+        :aria-pressed="wallTool"
+        :class="{ active: wallTool }"
+        @click="wallTool = !wallTool"
+      >
+        W
+      </button>
     </nav>
 
     <section class="map">
@@ -395,6 +425,9 @@ onBeforeUnmount(() => session.value?.close());
         ref="canvas"
         :scene="shape"
         :tokens="tokens"
+        :walls="walls"
+        :wall-tool="wallTool"
+        @wall="addWall"
         @moved="moveToken"
         @dragging="previewMove"
         @pointer="broadcastPointer"
@@ -600,6 +633,11 @@ onBeforeUnmount(() => session.value?.close());
 .rail button:hover {
   background: var(--sunken);
   color: var(--text);
+}
+
+.rail button.active {
+  background: var(--accent);
+  color: var(--accent-fg);
 }
 
 .railgap {

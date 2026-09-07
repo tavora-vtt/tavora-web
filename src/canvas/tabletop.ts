@@ -14,6 +14,16 @@ export interface TokenShape {
   disposition: string;
 }
 
+export interface WallShape {
+  id: string;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  door: boolean;
+  doorOpen: boolean;
+}
+
 export interface CursorShape {
   userId: string;
   name: string;
@@ -27,6 +37,7 @@ export interface TabletopHandlers {
   onSelected?: (id: string | null) => void;
   onPointer?: (x: number, y: number) => void;
   onView?: (zoom: number) => void;
+  onWall?: (x1: number, y1: number, x2: number, y2: number) => void;
 }
 
 const DISPOSITION_TOKENS: Record<string, string> = {
@@ -75,6 +86,8 @@ export class Tabletop {
   private app = new Application();
   private world = new Container();
   private grid = new Graphics();
+  private wallLayer = new Graphics();
+  private draftWall = new Graphics();
   private tokenLayer = new Container();
   private cursorLayer = new Container();
   private nodes = new Map<string, TokenNode>();
@@ -101,6 +114,8 @@ export class Tabletop {
 
     this.world.addChild(this.grid);
     this.world.addChild(this.tokenLayer);
+    this.world.addChild(this.wallLayer);
+    this.world.addChild(this.draftWall);
     this.world.addChild(this.cursorLayer);
     this.app.stage.addChild(this.world);
 
@@ -128,9 +143,46 @@ export class Tabletop {
     this.cursors.clear();
   }
 
+  private walls: WallShape[] = [];
+  private wallTool = false;
+  private wallStart: { x: number; y: number } | null = null;
+
+  setWallTool(enabled: boolean): void {
+    this.wallTool = enabled;
+    this.wallStart = null;
+    this.draftWall.clear();
+  }
+
+  setWalls(walls: WallShape[]): void {
+    this.walls = walls;
+    this.drawWalls();
+  }
+
+  private drawWalls(): void {
+    const size = this.scene.gridSize;
+    this.wallLayer.clear();
+
+    for (const wall of this.walls) {
+      const color = wall.door
+        ? cssColor("--attention", "b26a00")
+        : cssColor("--text-2", "5c6180");
+
+      this.wallLayer
+        .moveTo(wall.x1 * size, wall.y1 * size)
+        .lineTo(wall.x2 * size, wall.y2 * size)
+        .stroke({ color, width: 6, alpha: wall.doorOpen ? 0.35 : 0.9, cap: "round" });
+    }
+  }
+
+  private snapToGrid(x: number, y: number): { x: number; y: number } {
+    const size = this.scene.gridSize;
+    return { x: Math.round(x / size), y: Math.round(y / size) };
+  }
+
   setScene(scene: SceneShape): void {
     this.scene = scene;
     this.drawGrid();
+    this.drawWalls();
     this.fit();
   }
 
@@ -227,6 +279,19 @@ export class Tabletop {
     this.app.stage.on("pointerdown", (event: FederatedPointerEvent) => {
       if (event.target !== this.app.stage) return;
 
+      if (this.wallTool) {
+        const local = this.world.toLocal(event.global);
+        const point = this.snapToGrid(local.x, local.y);
+        if (!this.wallStart) {
+          this.wallStart = point;
+        } else {
+          this.handlers.onWall?.(this.wallStart.x, this.wallStart.y, point.x, point.y);
+          this.wallStart = null;
+          this.draftWall.clear();
+        }
+        return;
+      }
+
       this.select(null);
       this.panning = true;
       this.panFrom = {
@@ -237,6 +302,19 @@ export class Tabletop {
     });
 
     this.app.stage.on("pointermove", (event: FederatedPointerEvent) => {
+      if (this.wallTool && this.wallStart) {
+        const local = this.world.toLocal(event.global);
+        const end = this.snapToGrid(local.x, local.y);
+        const size = this.scene.gridSize;
+
+        this.draftWall
+          .clear()
+          .moveTo(this.wallStart.x * size, this.wallStart.y * size)
+          .lineTo(end.x * size, end.y * size)
+          .stroke({ color: cssColor("--accent", "5b4be8"), width: 5, alpha: 0.8, cap: "round" });
+        return;
+      }
+
       if (this.panning) {
         this.world.position.set(event.global.x - this.panFrom.x, event.global.y - this.panFrom.y);
         return;
@@ -447,6 +525,7 @@ export class Tabletop {
 
   repaint(): void {
     this.drawGrid();
+    this.drawWalls();
     for (const node of this.nodes.values()) {
       this.paintRing(node);
       node.label.style.fill = cssColor("--text", "16182a");

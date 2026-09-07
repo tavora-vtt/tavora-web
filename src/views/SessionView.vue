@@ -6,6 +6,7 @@ import type { SceneShape, TokenShape } from "../canvas/tabletop";
 import BrandMark from "../components/BrandMark.vue";
 import ThemeToggle from "../components/ThemeToggle.vue";
 import TabletopCanvas from "../components/TabletopCanvas.vue";
+import ChatPanel, { type ChatMessage } from "../components/ChatPanel.vue";
 
 const props = defineProps<{ identity: Identity; world: World }>();
 const emit = defineEmits<{ (event: "leave"): void }>();
@@ -17,6 +18,7 @@ const sequence = ref(0);
 const role = ref(props.world.role ?? "");
 const members = ref<Member[]>([]);
 const log = ref<{ seq: number; kind: string; summary: string }[]>([]);
+const messages = ref<ChatMessage[]>([]);
 const inviteToken = ref("");
 const selected = ref<string | null>(null);
 
@@ -126,8 +128,24 @@ function broadcastPointer(x: number, y: number) {
   });
 }
 
+function post(text: string, audience: string) {
+  void session.value?.intent("chat.post", { text, audience });
+}
+
+function roll(expression: string, reason: string, audience: string) {
+  void session.value?.intent("chat.roll", { expression, reason, audience });
+}
+
 function record(event: EventFrame) {
   sequence.value = event.seq;
+
+  if (event.kind === "chat.message") {
+    const message = event.payload as ChatMessage | undefined;
+    if (message?.id && !messages.value.some((entry) => entry.id === message.id)) {
+      messages.value = [...messages.value, message].slice(-200);
+    }
+    return;
+  }
 
   if (event.kind === "scene.activate") {
     const activated = event.payload as { sceneId?: string; name?: string } | undefined;
@@ -313,19 +331,12 @@ onBeforeUnmount(() => session.value?.close());
         <p v-if="inviteLink" class="mono link">{{ inviteLink }}</p>
       </div>
 
-      <div class="panel feed">
+      <div class="panel chatwrap">
         <h3 class="eyebrow">
-          World events · seq {{ sequence }}
+          Chat · seq {{ sequence }}
           <em v-if="selected" class="mono selected">{{ selected }}</em>
         </h3>
-        <p v-if="log.length === 0" class="muted">Nothing has happened yet.</p>
-        <ul>
-          <li v-for="entry in log" :key="entry.seq">
-            <span class="mono seq">{{ entry.seq }}</span>
-            <span>{{ entry.summary }}</span>
-            <em class="muted">{{ entry.kind }}</em>
-          </li>
-        </ul>
+        <ChatPanel :messages="messages" :can-whisper="isGM" @post="post" @roll="roll" />
       </div>
     </aside>
   </div>
@@ -464,10 +475,15 @@ onBeforeUnmount(() => session.value?.close());
   gap: 8px;
 }
 
-.panel.feed {
+.panel.chatwrap {
   flex: 1;
   min-height: 0;
-  overflow: auto;
+  padding: 0;
+  border-bottom: 0;
+}
+
+.panel.chatwrap > h3 {
+  padding: 10px 10px 0;
 }
 
 .panel h3 {

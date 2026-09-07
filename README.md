@@ -54,6 +54,10 @@ active, and every connected client follows: the `scene.activate` intent writes t
 active scene, appends an event and fans it out, so nobody has to be told to switch. Players
 see which scene is live but cannot change it.
 
+The dock carries a chat panel: type to talk, `/r 4d6kh3` or the quick buttons to roll. Roll
+cards show every die, with dropped ones struck through, and the total on the right. A game
+master can tick "staff only" to keep a roll off the players' sockets.
+
 The client speaks the readable JSON protocol for now, so the dev server sets
 `TAVORA_PROTOCOL_JSON=1`. Protobuf on the client follows once `tavora-protocol` generates
 its TypeScript bindings.

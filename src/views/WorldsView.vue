@@ -2,7 +2,7 @@
 import { onMounted, ref } from "vue";
 import { api, ApiError, type Identity, type World } from "../api/client";
 import BrandMark from "../components/BrandMark.vue";
-import ThemeToggle from "../components/ThemeToggle.vue";
+import UserMenu from "../components/UserMenu.vue";
 
 defineProps<{ identity: Identity }>();
 const emit = defineEmits<{
@@ -53,9 +53,7 @@ onMounted(load);
       <BrandMark />
       <strong>Tavora</strong>
       <div class="spacer"></div>
-      <ThemeToggle />
-      <span class="muted">{{ identity.username }}</span>
-      <button class="btn btn-quiet" type="button" @click="emit('sign-out')">Sign out</button>
+      <UserMenu :username="identity.username" leave-label="Sign out" @leave="emit('sign-out')" />
     </header>
 
     <main>
@@ -64,7 +62,7 @@ onMounted(load);
 
         <p v-if="loading" class="muted">Loading</p>
         <p v-else-if="worlds.length === 0" class="muted empty">
-          You are not in any world yet. Create one below, or open an invite link someone sent you.
+          No tables yet. Create one below, or open an invite link.
         </p>
 
         <ul v-else class="worlds">
@@ -110,16 +108,16 @@ onMounted(load);
 .bar {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 0 12px;
-  height: 44px;
-  background: var(--chrome-raised);
-  border-bottom: 1px solid var(--border);
+  gap: 8px;
+  padding: 0 8px 0 10px;
+  height: 40px;
+  background: var(--chrome);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .bar strong {
   font-family: var(--cond);
-  font-size: 15px;
+  font-size: 14px;
 }
 
 .spacer {

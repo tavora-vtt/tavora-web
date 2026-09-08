@@ -28,6 +28,13 @@ h3 {
   text-wrap: balance;
 }
 
+/* Spacing comes from the layout's gaps, never from stacked default margins. */
+p,
+ul,
+ol {
+  margin: 0;
+}
+
 button,
 input,
 select,

@@ -91,6 +91,16 @@ uploaded with. A portrait is cropped into the disposition ring, and token names 
 outline in the interface's own background colour so they stay readable over a dark map, a
 bright one, and either theme.
 
+Chrome stays out of the way. The top bar is the 40 px doc 14 specifies and holds only what
+belongs there: the world, the active scene, one connection dot, and you. Theme and density
+are settings, so they live in the user menu behind your name rather than as permanent
+widgets in the bar. Nothing on a player-facing screen reports which storage backend the
+server uses, which protocol sequence the socket is on, or which renderer the canvas picked.
+
+Amber is spent only where the design system allows it: your turn in combat, and a
+connection that needs looking at. The active scene and an editable sheet used to be amber
+too, which quietly spent the one signal that is supposed to be unmissable.
+
 The client speaks the binary Protobuf protocol, generated from `tavora-protocol` and
 consumed as a git dependency pinned to a tag. Append `?protocol=json` to the page URL to
 switch the socket to the readable encoding for debugging; the server only honours it when

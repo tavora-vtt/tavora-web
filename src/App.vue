@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { api, type Identity, type World } from "./api/client";
+import { restorePreferences } from "./ui/preferences";
 import GateView from "./views/GateView.vue";
 import WorldsView from "./views/WorldsView.vue";
 import SessionView from "./views/SessionView.vue";
@@ -11,16 +12,8 @@ const stage = ref<Stage>("loading");
 const needsSetup = ref(false);
 const identity = ref<Identity | null>(null);
 const world = ref<World | null>(null);
-const backend = ref("");
 
 async function bootstrap() {
-  try {
-    const health = await api.health();
-    backend.value = health.storage ?? "";
-  } catch {
-    backend.value = "";
-  }
-
   try {
     identity.value = await api.me();
     stage.value = "worlds";
@@ -60,21 +53,17 @@ function leaveWorld() {
   stage.value = "worlds";
 }
 
+restorePreferences();
+
 onMounted(bootstrap);
 </script>
 
 <template>
   <div v-if="stage === 'loading'" class="boot">
     <span class="eyebrow">Tavora</span>
-    <p class="muted">Connecting to the server</p>
   </div>
 
-  <GateView
-    v-else-if="stage === 'gate'"
-    :needs-setup="needsSetup"
-    :backend="backend"
-    @signed-in="onSignedIn"
-  />
+  <GateView v-else-if="stage === 'gate'" :needs-setup="needsSetup" @signed-in="onSignedIn" />
 
   <WorldsView
     v-else-if="stage === 'worlds' && identity"

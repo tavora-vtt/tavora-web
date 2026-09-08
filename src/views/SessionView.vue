@@ -14,7 +14,8 @@ import {
 import { Session, type ConnectionState, type EventFrame } from "../net/socket";
 import type { SceneShape, TokenShape, WallShape } from "../canvas/tabletop";
 import BrandMark from "../components/BrandMark.vue";
-import ThemeToggle from "../components/ThemeToggle.vue";
+import ToolIcon from "../components/ToolIcon.vue";
+import UserMenu from "../components/UserMenu.vue";
 import TabletopCanvas from "../components/TabletopCanvas.vue";
 import ChatPanel, { type ChatMessage } from "../components/ChatPanel.vue";
 import ActorSheet, { type Actor } from "../components/ActorSheet.vue";
@@ -81,15 +82,21 @@ const shape = computed<SceneShape | null>(() =>
 const stateLabel = computed(() => {
   switch (state.value) {
     case "live":
-      return "connected";
+      return "Connected";
     case "connecting":
-      return "connecting";
+      return "Connecting";
     case "reconnecting":
-      return detail.value ? `reconnecting: ${detail.value}` : "reconnecting";
+      return detail.value ? `Reconnecting: ${detail.value}` : "Reconnecting";
     default:
-      return "offline";
+      return "Offline";
   }
 });
+
+const stateDetail = computed(() =>
+  latency.value !== null && state.value === "live"
+    ? `${stateLabel.value} · ${latency.value} ms`
+    : stateLabel.value,
+);
 
 function toShape(record: TokenRecord): TokenShape {
   return {
@@ -563,51 +570,69 @@ onBeforeUnmount(() => session.value?.close());
 <template>
   <div class="shell">
     <header class="topbar">
-      <BrandMark :size="20" />
+      <BrandMark :size="18" />
       <strong class="world">{{ world.title }}</strong>
-      <span class="scene">{{ scene?.name ?? "no scene" }}</span>
+      <span v-if="scene" class="scene">{{ scene.name }}</span>
 
       <div class="spacer"></div>
 
-      <span class="status" :data-state="state">
-        <i></i>{{ stateLabel }}
-        <em v-if="latency !== null" class="mono">{{ latency }} ms</em>
+      <span class="status" :data-state="state" :title="stateDetail">
+        <i></i>
+        <span v-if="state !== 'live'">{{ stateLabel }}</span>
+        <span v-else class="sr">{{ stateDetail }}</span>
       </span>
-      <ThemeToggle />
-      <span class="muted">{{ identity.username }} · {{ role }}</span>
-      <button class="btn btn-quiet" type="button" @click="emit('leave')">Leave</button>
+      <UserMenu
+        :username="identity.username"
+        :role="role"
+        leave-label="Leave table"
+        @leave="emit('leave')"
+      />
     </header>
 
     <nav class="rail" aria-label="Tools">
-      <button v-for="tool in ['select', 'measure', 'ping']" :key="tool" :title="tool" type="button">
-        <span aria-hidden="true">{{ tool[0]?.toUpperCase() }}</span>
+      <button
+        v-for="tool in ['select', 'measure', 'ping'] as const"
+        :key="tool"
+        :title="tool"
+        type="button"
+      >
+        <ToolIcon :name="tool" />
         <span class="sr">{{ tool }}</span>
       </button>
-      <div class="railgap"></div>
-      <button v-if="isGM && scene" title="Add token" type="button" @click="addToken">+</button>
-      <button
-        v-if="isGM && scene"
-        title="Draw walls"
-        type="button"
-        :aria-pressed="wallTool"
-        :class="{ active: wallTool }"
-        @click="wallTool = !wallTool"
-      >
-        W
-      </button>
-      <button
-        v-if="isGM && scene"
-        title="Draw doors"
-        type="button"
-        :aria-pressed="doorTool"
-        :class="{ active: doorTool }"
-        @click="
-          doorTool = !doorTool;
-          wallTool = doorTool || wallTool;
-        "
-      >
-        D
-      </button>
+
+      <template v-if="isGM && scene">
+        <div class="railgap"></div>
+        <button title="Add token" type="button" @click="addToken">
+          <ToolIcon name="token" />
+          <span class="sr">Add token</span>
+        </button>
+        <button
+          title="Draw walls"
+          type="button"
+          :aria-pressed="wallTool && !doorTool"
+          :class="{ active: wallTool && !doorTool }"
+          @click="
+            wallTool = !wallTool || doorTool;
+            doorTool = false;
+          "
+        >
+          <ToolIcon name="wall" />
+          <span class="sr">Draw walls</span>
+        </button>
+        <button
+          title="Draw doors"
+          type="button"
+          :aria-pressed="doorTool"
+          :class="{ active: doorTool }"
+          @click="
+            doorTool = !doorTool;
+            wallTool = doorTool;
+          "
+        >
+          <ToolIcon name="door" />
+          <span class="sr">Draw doors</span>
+        </button>
+      </template>
     </nav>
 
     <section class="map">
@@ -626,12 +651,10 @@ onBeforeUnmount(() => session.value?.close());
         @selected="(id) => (selected = id)"
       />
       <div v-else class="empty">
-        <p class="eyebrow">no scene</p>
-        <p class="muted">This world has no scene yet.</p>
+        <p class="muted">No scene yet.</p>
         <button v-if="isGM" class="btn btn-primary" type="button" @click="createScene">
           Create a scene
         </button>
-        <p v-else class="muted">Ask the game master to create one.</p>
       </div>
     </section>
 
@@ -704,10 +727,10 @@ onBeforeUnmount(() => session.value?.close());
           </label>
         </h3>
 
-        <p class="muted target">
-          Pick one for <strong>{{ artTarget }}</strong>
+        <p class="target">
+          for <strong>{{ artTarget }}</strong>
         </p>
-        <p v-if="uploadError" class="muted warn">{{ uploadError }}</p>
+        <p v-if="uploadError" class="warn">{{ uploadError }}</p>
 
         <div v-if="assets.length" class="gallery">
           <button
@@ -721,9 +744,9 @@ onBeforeUnmount(() => session.value?.close());
             <img :src="asset.thumbnail ?? asset.url" :alt="''" loading="lazy" />
           </button>
         </div>
-        <p v-else class="muted">Upload a map or a portrait.</p>
+        <p v-else class="muted">Nothing uploaded.</p>
 
-        <button class="btn btn-quiet clear" type="button" @click="clearArt">
+        <button v-if="assets.length" class="btn btn-quiet clear" type="button" @click="clearArt">
           Clear {{ selected ? "token art" : "the map" }}
         </button>
       </div>
@@ -756,16 +779,13 @@ onBeforeUnmount(() => session.value?.close());
           </li>
         </ul>
         <button v-if="isGM" class="btn btn-quiet invite" type="button" @click="createInvite">
-          Create invite link
+          Invite a player
         </button>
         <p v-if="inviteLink" class="mono link">{{ inviteLink }}</p>
       </div>
 
       <div class="panel chatwrap">
-        <h3 class="eyebrow">
-          Chat · seq {{ sequence }}
-          <em v-if="selected" class="mono selected">{{ selected }}</em>
-        </h3>
+        <h3 class="eyebrow">Chat</h3>
         <ChatPanel :messages="messages" :can-whisper="isGM" @post="post" @roll="roll" />
       </div>
     </aside>
@@ -785,8 +805,8 @@ onBeforeUnmount(() => session.value?.close());
 .shell {
   height: 100%;
   display: grid;
-  grid-template-columns: var(--rail) 1fr 280px;
-  grid-template-rows: 44px 1fr;
+  grid-template-columns: var(--rail) 1fr 272px;
+  grid-template-rows: 40px 1fr;
   grid-template-areas:
     "top top top"
     "rail map dock";
@@ -797,23 +817,26 @@ onBeforeUnmount(() => session.value?.close());
   grid-area: top;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 0 12px;
-  background: var(--chrome-raised);
-  border-bottom: 1px solid var(--border);
+  gap: 8px;
+  padding: 0 8px 0 10px;
+  background: var(--chrome);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .world {
   font-family: var(--cond);
-  font-size: 15px;
+  font-size: 14px;
 }
 
 .scene {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-2);
-  border: 1px solid var(--border);
-  border-radius: var(--r-input);
-  padding: 2px 7px;
+}
+
+.scene::before {
+  content: "/";
+  margin-inline-end: 8px;
+  color: var(--text-3);
 }
 
 .spacer {
@@ -825,12 +848,12 @@ onBeforeUnmount(() => session.value?.close());
   align-items: center;
   gap: 6px;
   font-size: 11px;
-  color: var(--text-2);
+  color: var(--attention);
 }
 
 .status i {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: var(--text-3);
 }
@@ -851,18 +874,22 @@ onBeforeUnmount(() => session.value?.close());
   align-items: center;
   gap: 2px;
   padding: 6px 0;
-  border-inline-end: 1px solid var(--border);
+  border-inline-end: 1px solid var(--border-subtle);
 }
 
 .rail button {
+  display: grid;
+  place-items: center;
   width: 30px;
   height: 30px;
   border: 0;
   border-radius: var(--r-input);
   background: none;
   color: var(--text-3);
-  font-weight: 600;
   cursor: pointer;
+  transition:
+    background var(--t-state),
+    color var(--t-state);
 }
 
 .rail button:hover {
@@ -876,7 +903,9 @@ onBeforeUnmount(() => session.value?.close());
 }
 
 .railgap {
-  height: 10px;
+  width: 20px;
+  margin: 5px 0;
+  border-top: 1px solid var(--border-subtle);
 }
 
 .sr {
@@ -905,18 +934,19 @@ onBeforeUnmount(() => session.value?.close());
 
 .dock {
   grid-area: dock;
-  border-inline-start: 1px solid var(--border);
+  border-inline-start: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
   min-height: 0;
+  overflow: auto;
 }
 
 .panel {
-  padding: 10px;
-  border-bottom: 1px solid var(--border);
+  padding: 9px var(--pad);
+  border-bottom: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .panel.chatwrap {
@@ -927,21 +957,35 @@ onBeforeUnmount(() => session.value?.close());
 }
 
 .panel.chatwrap > h3 {
-  padding: 10px 10px 0;
+  padding: 9px var(--pad) 0;
 }
 
 .panel h3 {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-height: 20px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
 }
 
-.selected {
+/* Quiet controls sit on the section's own text edge, not inset by their padding. */
+.panel > .btn-quiet,
+.panel .row .btn-quiet {
+  margin-inline-start: -8px;
+  padding-inline: 8px;
+  align-self: flex-start;
+}
+
+.panel .add {
   margin-inline-start: auto;
-  font-style: normal;
-  text-transform: none;
-  letter-spacing: 0;
-  color: var(--accent);
+  margin-inline-end: -6px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1;
 }
 
 .panel ul {
@@ -960,12 +1004,20 @@ onBeforeUnmount(() => session.value?.close());
   gap: 7px;
 }
 
+.target {
+  margin: -2px 0 0;
+  font-size: 11px;
+  color: var(--text-3);
+}
+
 .target strong {
-  color: var(--text);
+  color: var(--text-2);
   font-weight: 600;
 }
 
 .warn {
+  margin: 0;
+  font-size: 11px;
   color: var(--danger);
 }
 
@@ -1006,8 +1058,8 @@ onBeforeUnmount(() => session.value?.close());
 }
 
 .clear {
-  margin-block-start: 8px;
-  width: 100%;
+  margin-block-start: 2px;
+  font-size: 11px;
 }
 
 .panel li em {
@@ -1100,12 +1152,6 @@ onBeforeUnmount(() => session.value?.close());
   gap: 6px;
 }
 
-.add {
-  margin-inline-start: auto;
-  height: 20px;
-  padding: 0 7px;
-}
-
 .scenes button {
   width: 100%;
   display: flex;
@@ -1130,7 +1176,8 @@ onBeforeUnmount(() => session.value?.close());
 }
 
 .scenes button.current {
-  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--text);
 }
 
 .dot {
@@ -1141,8 +1188,8 @@ onBeforeUnmount(() => session.value?.close());
 }
 
 .dot.live {
-  background: var(--attention);
-  border-color: var(--attention);
+  background: var(--accent);
+  border-color: var(--accent);
 }
 
 .link {

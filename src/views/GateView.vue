@@ -3,7 +3,7 @@ import { computed, ref } from "vue";
 import { api, ApiError, type Identity } from "../api/client";
 import BrandMark from "../components/BrandMark.vue";
 
-const props = defineProps<{ needsSetup: boolean; backend: string }>();
+const props = defineProps<{ needsSetup: boolean }>();
 const emit = defineEmits<{ (event: "signed-in", identity: Identity): void }>();
 
 const username = ref("");
@@ -53,9 +53,7 @@ async function submit() {
         </div>
       </header>
 
-      <p v-if="needsSetup" class="muted intro">
-        No accounts exist yet. The first account you create administers this server.
-      </p>
+      <p v-if="needsSetup" class="muted intro">This first account administers the server.</p>
 
       <div class="field">
         <label for="username">Username</label>
@@ -78,8 +76,6 @@ async function submit() {
       <button class="btn btn-primary" type="submit" :disabled="busy">
         {{ busy ? "Working" : action }}
       </button>
-
-      <footer v-if="backend" class="eyebrow">storage: {{ backend }}</footer>
     </form>
   </main>
 </template>
@@ -118,9 +114,5 @@ h1 {
 
 .intro {
   font-size: 12.5px;
-}
-
-footer {
-  text-align: center;
 }
 </style>

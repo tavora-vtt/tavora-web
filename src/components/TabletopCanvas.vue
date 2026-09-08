@@ -25,7 +25,6 @@ const emit = defineEmits<{
 
 const host = ref<HTMLElement | null>(null);
 const table = shallowRef<Tabletop | null>(null);
-const renderer = ref("");
 const zoom = ref(1);
 
 defineExpose({
@@ -66,7 +65,6 @@ onMounted(async () => {
 
   await instance.mount(host.value);
   table.value = instance;
-  renderer.value = instance.renderer;
 
   if (props.scene) instance.setScene(props.scene);
   instance.setTokens(props.tokens);
@@ -122,7 +120,6 @@ onBeforeUnmount(() => {
         Fit
       </button>
       <span class="badge mono">{{ Math.round(zoom * 100) }}%</span>
-      <span v-if="renderer" class="badge mono">{{ renderer }}</span>
     </div>
   </div>
 </template>

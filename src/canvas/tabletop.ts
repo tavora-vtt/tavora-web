@@ -53,14 +53,60 @@ export interface TabletopHandlers {
   onDoor?: (id: string) => void;
 }
 
-const DISPOSITION_TOKENS: Record<string, string> = {
-  friendly: "--success",
-  hostile: "--danger",
-  secret: "--secret",
-  neutral: "--neutral",
+type RingStyle = "solid" | "dashed" | "double" | "dotted";
+
+/**
+ * Disposition is never encoded by colour alone. The ring style is the redundant channel
+ * that keeps friendly from hostile readable under any colour vision deficiency.
+ */
+const DISPOSITIONS: Record<string, { token: string; ring: RingStyle }> = {
+  friendly: { token: "--success", ring: "solid" },
+  neutral: { token: "--neutral", ring: "dashed" },
+  hostile: { token: "--danger", ring: "double" },
+  secret: { token: "--secret", ring: "dotted" },
 };
 
-const CURSOR_PALETTE = ["--accent", "--success", "--attention", "--secret", "--danger"];
+const CURSOR_PALETTE = ["--player-1", "--player-2", "--player-3", "--player-4", "--player-5"];
+
+/**
+ * strokeRing draws a circle in one of the disposition ring styles. Dashes and dots are
+ * arcs with gaps, because a stroke has no dash pattern of its own.
+ */
+function strokeRing(
+  target: Graphics,
+  cx: number,
+  cy: number,
+  radius: number,
+  style: RingStyle,
+  color: number,
+  width: number,
+): void {
+  const segments = (count: number, covered: number) => {
+    const step = (Math.PI * 2) / count;
+    for (let index = 0; index < count; index++) {
+      const start = index * step;
+      target.moveTo(cx + Math.cos(start) * radius, cy + Math.sin(start) * radius);
+      target.arc(cx, cy, radius, start, start + step * covered);
+    }
+  };
+
+  switch (style) {
+    case "dashed":
+      segments(10, 0.6);
+      break;
+    case "dotted":
+      segments(20, 0.16);
+      break;
+    case "double":
+      target.circle(cx, cy, radius);
+      target.circle(cx, cy, radius - width * 1.8);
+      break;
+    default:
+      target.circle(cx, cy, radius);
+  }
+
+  target.stroke({ color, width, cap: "round" });
+}
 
 /**
  * labelColors outlines a token's name in the colour of the surface behind the interface,
@@ -94,6 +140,7 @@ function hashOf(value: string): number {
 interface TokenNode {
   container: Container;
   ring: Graphics;
+  halo: Graphics;
   art: Sprite;
   mask: Graphics;
   paintedArt: string;
@@ -198,7 +245,7 @@ export class Tabletop {
     this.wallLayer.clear();
 
     for (const wall of this.walls) {
-      const color = wall.door ? cssColor("--attention", "b26a00") : cssColor("--text-2", "5c6180");
+      const color = wall.door ? cssColor("--accent", "5b4be8") : cssColor("--text-2", "5c6180");
 
       this.wallLayer
         .moveTo(wall.x1 * size, wall.y1 * size)
@@ -206,7 +253,7 @@ export class Tabletop {
         .stroke({
           color,
           width: 6,
-          alpha: wall.doorOpen ? 0.35 : 0.9,
+          alpha: wall.doorOpen ? 0.3 : 0.9,
           cap: "round",
         });
     }
@@ -226,12 +273,27 @@ export class Tabletop {
       if (!wall.door) continue;
 
       const handle = new Graphics();
-      const color = cssColor("--attention", "b26a00");
+      const color = cssColor("--accent", "5b4be8");
       const radius = Math.max(9, size * 0.16);
 
-      handle.circle(0, 0, radius).fill({ color, alpha: wall.doorOpen ? 0.3 : 0.85 });
-      handle.circle(0, 0, radius).stroke({ color, width: 2 });
+      // The leaf lies in the opening when the door is shut and swings clear when it is
+      // open, so which one you are looking at survives being read at a glance.
+      if (wall.doorOpen) {
+        handle.circle(0, 0, radius).stroke({ color, width: 2, alpha: 0.75 });
+        handle
+          .moveTo(0, -radius * 0.6)
+          .lineTo(0, radius * 0.6)
+          .stroke({ color, width: 2.5, cap: "round" });
+      } else {
+        handle.circle(0, 0, radius).fill({ color, alpha: 0.9 });
+        handle
+          .moveTo(-radius * 0.6, 0)
+          .lineTo(radius * 0.6, 0)
+          .stroke({ color: cssColor("--accent-fg", "ffffff"), width: 2, cap: "round" });
+      }
+
       handle.position.set(((wall.x1 + wall.x2) / 2) * size, ((wall.y1 + wall.y2) / 2) * size);
+      handle.rotation = Math.atan2(wall.y2 - wall.y1, wall.x2 - wall.x1);
       handle.eventMode = "static";
       handle.cursor = "pointer";
       handle.on("pointerdown", (event: FederatedPointerEvent) => {
@@ -486,9 +548,8 @@ export class Tabletop {
 
   private select(id: string | null): void {
     this.selected = id;
-    for (const [nodeId, node] of this.nodes) {
-      node.ring.tint = nodeId === id ? cssColor("--accent", "5b4be8") : 0xffffff;
-      node.ring.scale.set(nodeId === id ? 1.08 : 1);
+    for (const node of this.nodes.values()) {
+      this.paintSelection(node);
     }
     this.handlers.onSelected?.(id);
   }
@@ -510,19 +571,38 @@ export class Tabletop {
     }
     node.label.text = token.name;
     this.paintRing(node);
+    this.paintSelection(node);
     void this.paintArt(node);
   }
 
   private paintRing(node: TokenNode): void {
     const size = this.scene.gridSize;
     const radius = size * 0.42;
-    const color = cssColor(DISPOSITION_TOKENS[node.shape.disposition] ?? "--neutral", "5c6180");
+    const disposition = DISPOSITIONS[node.shape.disposition] ?? DISPOSITIONS.neutral!;
+    const color = cssColor(disposition.token, "5c6180");
+    const width = Math.max(2, size * 0.04);
 
     node.ring.clear();
     if (!node.art.visible) {
       node.ring.circle(size / 2, size / 2, radius).fill({ color, alpha: 0.22 });
     }
-    node.ring.circle(size / 2, size / 2, radius).stroke({ color, width: 4 });
+    strokeRing(node.ring, size / 2, size / 2, radius, disposition.ring, color, width);
+  }
+
+  /**
+   * paintSelection draws its own halo outside the disposition ring. Tinting the ring would
+   * mean a selected token stops telling you whether it is a friend.
+   */
+  private paintSelection(node: TokenNode): void {
+    node.halo.clear();
+    if (node.shape.id !== this.selected) {
+      return;
+    }
+
+    const size = this.scene.gridSize;
+    node.halo
+      .circle(size / 2, size / 2, size * 0.49)
+      .stroke({ color: cssColor("--accent", "5b4be8"), width: Math.max(1.5, size * 0.025) });
   }
 
   /**
@@ -571,6 +651,7 @@ export class Tabletop {
   private create(token: TokenShape): TokenNode {
     const container = new Container();
     const ring = new Graphics();
+    const halo = new Graphics();
     const art = new Sprite();
     const mask = new Graphics();
 
@@ -591,6 +672,7 @@ export class Tabletop {
     label.anchor.set(0.5, 0);
     label.position.set(this.scene.gridSize / 2, this.scene.gridSize * 0.92);
 
+    container.addChild(halo);
     container.addChild(art);
     container.addChild(mask);
     container.addChild(ring);
@@ -601,6 +683,7 @@ export class Tabletop {
     const node: TokenNode = {
       container,
       ring,
+      halo,
       art,
       mask,
       label,
@@ -716,6 +799,7 @@ export class Tabletop {
     this.drawWalls();
     for (const node of this.nodes.values()) {
       this.paintRing(node);
+      this.paintSelection(node);
       Object.assign(node.label.style, labelColors());
     }
     this.select(this.selected);

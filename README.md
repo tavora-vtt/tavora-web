@@ -98,8 +98,15 @@ widgets in the bar. Nothing on a player-facing screen reports which storage back
 server uses, which protocol sequence the socket is on, or which renderer the canvas picked.
 
 Amber is spent only where the design system allows it: your turn in combat, and a
-connection that needs looking at. The active scene and an editable sheet used to be amber
-too, which quietly spent the one signal that is supposed to be unmissable.
+connection that needs looking at. The active scene, an editable sheet, doors and remote
+cursors used to be amber too, which quietly spent the one signal that is supposed to be
+unmissable. Cursors now draw from a small identity scale of their own, because who someone
+is was never a UI state and should never have borrowed a semantic colour.
+
+Disposition carries a second, non-colour channel as doc 15 requires: friendly is a solid
+ring, neutral dashed, hostile doubled, secret dotted. Selection draws its own halo outside
+that ring rather than tinting it, so a selected token still tells you whether it is a
+friend.
 
 The client speaks the binary Protobuf protocol, generated from `tavora-protocol` and
 consumed as a git dependency pinned to a tag. Append `?protocol=json` to the page URL to

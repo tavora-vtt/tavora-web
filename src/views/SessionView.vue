@@ -396,10 +396,9 @@ function record(event: EventFrame) {
   }
 
   if (event.kind === "scene.visibility") {
-    const update = event.payload as
-      { tokens?: { id: string; name: string; data: TokenRecord["data"] }[] } | undefined;
+    const update = event.payload as { tokens?: TokenRecord[] } | undefined;
     if (update?.tokens) {
-      tokens.value = update.tokens.map((record) => toShape(record as TokenRecord));
+      tokens.value = update.tokens.map(toShape);
     }
     return;
   }

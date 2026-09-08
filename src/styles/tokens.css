@@ -24,6 +24,13 @@
   --map-ground: #dedfec;
   --shadow: 0 10px 28px rgb(16 18 42 / 13%), 0 1px 2px rgb(16 18 42 / 10%);
 
+  /* Who, not what. Identity never borrows a semantic colour, and never amber. */
+  --player-1: #5b4be8;
+  --player-2: #0e8fa8;
+  --player-3: #c2337e;
+  --player-4: #2f7d32;
+  --player-5: #2456c7;
+
   --sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --cond: "IBM Plex Sans Condensed", "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -66,6 +73,12 @@
     --map-ink: #2a2f4a;
     --map-ground: #151827;
     --shadow: 0 12px 32px rgb(0 0 0 / 55%), 0 1px 2px rgb(0 0 0 / 40%);
+
+    --player-1: #8b7bf5;
+    --player-2: #3fc0dc;
+    --player-3: #f06cb0;
+    --player-4: #4fc97e;
+    --player-5: #6e9bff;
   }
 }
 
@@ -92,6 +105,12 @@
   --map-ink: #2a2f4a;
   --map-ground: #151827;
   --shadow: 0 12px 32px rgb(0 0 0 / 55%), 0 1px 2px rgb(0 0 0 / 40%);
+
+  --player-1: #8b7bf5;
+  --player-2: #3fc0dc;
+  --player-3: #f06cb0;
+  --player-4: #4fc97e;
+  --player-5: #6e9bff;
 }
 
 :root[data-density="compact"] {
